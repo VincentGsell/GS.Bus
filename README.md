@@ -11,7 +11,10 @@
   - Basic statistics capabilities.
   - Used *extensively* in many projects, and is is a GS.GRID pillars.
   
-- Show the code !
+- Dependancy : 
+  - [GS.Core](https://github.com/VincentGsell/GS.Core)
+  
+- Show me the code !
 
   - short previous docs : 
     - Messages are "just" bytes buffer.
@@ -24,7 +27,7 @@
 	  - Bus dispatch message in only one backround thread.
 	  
 	  
-  - Now the code : 
+  - here is an exemple app : 
   
   this exemple show how to use the main feature of the bus : A subscription to a topic, and message send and delivery.
   Basically, we have 2 buttons : One simply send a message on topic "Test channel", the other create a thread.
