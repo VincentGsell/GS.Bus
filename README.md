@@ -1,15 +1,16 @@
-# GS.Bus : *InterThread* communication Bus for FPC/Delphi
+# GS.Bus : *InterThread* communication Application Bus for FPC/Delphi
   
-  the unit GS.Bus owned a complete and easy to use bus system.
+  the unit GS.Bus owned a complete and easy to use application bus system.
   
 - main features : 
+  - Allowed to communicate by message throught app, same thread or not, between unit, module, form, or whatever.
   - *Efficient* bus with Channels management (publish/subscribe on topics and Queues)
   - Preserve send sequence and distribute messages in a balanced manner (no contention)
   - Thread Safe, **inter thread** communication : You can communicate efficently between thread, with no compromise or pain.
   - "synchronise solution Free" : Get incoming messages events *always* in your thread context, *without* synchro call.
   - Nice sides features : such as in-memory KeyValue pseudo DB : nice to shared data within an app.
   - Basic statistics capabilities.
-  - Used *extensively* in many projects, and is is a GS.GRID pillars.
+  - Used *extensively* in many projects, and it is a GS.GRID pillars.
   
 - Dependancy : 
   - [GS.Core](https://github.com/VincentGsell/GS.Core)
@@ -18,15 +19,14 @@
 
   - short previous docs : 
     - Messages are "just" bytes buffer.
-	- Sending is as simple as "myBus.Send(MyMessage, 'A nice topic');
-	  - This method is crafted to be fast.
-	  - There are mirror methods, such as Recv and SendAndRecv to facilitate rpc call.
-	- There are a key function, to call from everywhere you want : BusProcessMessages([client1, client2, ...])
-	  - this method will delivers messages from the subscribe's client you choose, where you want.
-	  - This method allow, in fact, to choose in *which thread context* you will process the incoming messages
-	  - Bus dispatch message in only one backround thread.
-	  
-	  
+    - Sending is as simple as "myBus.Send(MyMessage, 'A nice topic');
+      - This method is crafted to be fast.
+      - There are mirror methods, such as Recv and SendAndRecv to facilitate rpc call.
+    - There are a key function, to call from everywhere you want : BusProcessMessages([client1, client2, ...])
+      - this method will delivers messages from the subscribe's client you choose, where you want.
+      - This method allow, in fact, to choose in *which thread context* you will process the incoming messages
+    - Bus dispatch message is done in backround thread.
+	  	  
   - here is an exemple app : 
   
   this exemple show how to use the main feature of the bus : A subscription to a topic, and message send and delivery.
