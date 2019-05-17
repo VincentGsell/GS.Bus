@@ -68,3 +68,5 @@ Binaries
 
 # Boss dependency manager vendor folder https://github.com/HashLoad/boss
 modules/
+*.vsd
+*.pdn
