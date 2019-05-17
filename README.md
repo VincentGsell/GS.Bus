@@ -12,6 +12,8 @@
   - Basic statistics capabilities.
   - Used *extensively* in many projects, and it is a GS.GRID pillars.
   
+  ![Alt text](/../master/Ressources/BusSchema.png?raw=true "")
+  
 - Dependancy : 
   - [GS.Core](https://github.com/VincentGsell/GS.Core)
   
@@ -43,14 +45,26 @@
 
 
 # Demo
+  
   GS.Bus
+  
+  this demo allowed to send messages, with many subscribtion, and multi thread sender.
+  The app will show hit data receiving, and show how heavy loading could be managed into an app.
   ![Alt text](/../master/Ressources/busbench.png?raw=true "")
+  
+  
+  this demo show the Key/Value features.
+  Technically, it is entirely based uppon Bus message communication. It Show how transform the bus into local, in app, interthread RPC system.
   ![Alt text](/../master/Ressources/busbench_kv.png?raw=true "")  
+  
   GS.MVVM
+  An attempt to use Bus for build a Model-View-View-Model system. Work pretty good, but R&D only. 
   ![Alt text](/../master/Ressources/mvvm.png?raw=true "")
+  
+  
   GS.MemCached
+  This demo show a complete KeyValue with "basic" file persistence : If you plan to use it pro, please, consider to replace the persitence layer. We have several one, if you wish.
   ![Alt text](/../master/Ressources/memcached.png?raw=true "")
 
- 
     
   
