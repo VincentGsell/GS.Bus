@@ -62,6 +62,7 @@ type
     Label10: TLabel;
     Button7: TButton;
     Button8: TButton;
+    cbEchoEnabled: TCheckBox;
     procedure btn1Click(Sender: TObject);
     procedure btn2Click(Sender: TObject);
     procedure btn3Click(Sender: TObject);
@@ -172,6 +173,8 @@ var la : TBusClientReader;
 begin
   la := Bus.Subscribe(edt1.Text,OnReceived);   //La owned by your app : you have to manage it.
   lst2.AddItem('Reader on '+la.ChannelListening,la);
+
+  bus.ChannelSet(edt1.Text,TBusChannelBehaviour.bcbTopic,false,CheckBox1.Checked);
 end;
 
 procedure TForm2.btn3Click(Sender: TObject);

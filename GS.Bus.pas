@@ -28,10 +28,15 @@
 ///                  Generic and base list refacto and relocation.
 /// 20190220 - VGS - Change channel Creation option. Improve Queue.
 ///                - Introduce Message count limitation per channel.
+///                  -> this could be usefull for heavy trafic source, such as object position data.
 /// 20190403 - VGS - Remove Wildcard features. After thinking, It is an Applevel
 ///                  feature, as it break completely an app if you enabled it.
 ///                  Moreover, it is on root bus level, it should be on channel level.
 ///                  So it a bit "tricky" and too "app analytics level" to be confortable here.
+/// 20190606 - VGS - Introduce AppFilter for channel privacy : Two client with same AppFilter can
+///                  communicate directly.
+///                - Introduce ClientId, to follow the author of a message on a reader point of view.
+///                - Introduce ChannelEchoEnabled (Default:True) : To allow or not "echo" effect :
 ///-------------------------------------------------------------------------------
 unit GS.Bus;
 
@@ -99,6 +104,8 @@ TBusEnvelop = packed Record
   ContentMessage : TBusMessage;
   AdditionalData : String;
   Persistent : Boolean;
+  ClientSourceId : String;
+  AppFilter : String;
 End;
 
 TBusMessageNotify = Procedure(Sender : TBusSystem; aReader : TBusClientReader; Var Packet : TBusEnvelop) Of Object;
@@ -142,7 +149,6 @@ Public
   Property Items : TList_PTBusEnvelop read FList; //Direct Access, beware (!).
 end;
 
-
 TBusChannelAdditionalInformation = class
 private
   FMasterChannel: TBusChannel;
@@ -151,9 +157,13 @@ Public
   Property MasterChannel : TBusChannel read FMasterChannel;
 end;
 
+//Restricted : Manual mode. Only user having same keypass where user give what "session can read or write
 TBusChannelPrivacy = Class(TBusChannelAdditionalInformation)
+private
+  FKeyPass: String;
 Public
-{ TODO 1 -oVGS -cNiceToHave : Add Restricted : Manual mode where user give what session can read or write. }
+  Constructor Create; virtual;
+  property KeyPass : String read FKeyPass Write FKeyPass;
 End;
 
 TBusChannelBehaviourTopic = Class(TBusChannelAdditionalInformation)
@@ -220,6 +230,7 @@ Protected
   FEventDeliveryDesactivateOnException: Boolean;
   FEventDelivery_ExceptionEnabled: Boolean;
   FChannelMessageCountLimitation : Integer;
+  FChannelEchoEnabled: Boolean;
   FMaster : TBusSystem;
 
   function GetConsumedMessageCount: Int64;
@@ -265,6 +276,11 @@ Public
   Property ChannelBehaviour : TBusChannelBehaviour read FBehaviour write SetChannelBehaviour;
   Property ChannelBehaviourInfo : TBusChannelAdditionalInformation read FBehaviourInfo;
 
+  //ChannelEchoEnabled : If false, there are no more "echo" effect
+  //(i.e. client's subscribted to "x" chan will not receive message they have just sent on the "x" chan.)
+  // -> It used ClientID propoerty of ClientReader and ClientWriter.
+  Property ChannelEchoEnabled : Boolean read FChannelEchoEnabled Write FChannelEchoEnabled;
+
   //- This will "limit" the number of message in channel
   //(Only the newest is taking account if there is no more room)
   // 2 effects :
@@ -305,23 +321,32 @@ Public
   Property Bus : TBusSystem read FBus;
 End;
 
+//Used to "sign" message.
+//Usage : - Determine who is writen from a receiver point of view (ID remain in envelop, not passkey).
+//        - Permit to make the channel private : The channel.passkey must be identical with Writer.passkey to allow to the message to be processed.
+//        - In cunjunction with TChannel.ChannelDuplex, you can avoid "echo" effect (Seet TChannel) and then build "one channel dupplex communication" over multi client.
 TBusClientReader = Class(TBusClient)
 private
+Protected
   FProcessMessageCount : Int64;
   FCallBack: TBusMessageNotify;
   FChannel: String;
   FData: TObject;
-Protected
+  FClientID: String;
+  FAppFilter: String;
+
   function GetClientProcessMessageCount: Int64; Override;
 Public
   Procedure IncProcessMessageCount;
 
-  //Not aimed to be call directly : Call Bus.Subscribt.
+  //Not aimed to be call directly : Call by Bus.Subscribt.
   Constructor Create(aBus : TBusSystem; aChannelName : String; aCallBack : TBusMessageNotify); Reintroduce;
 
   Property ChannelListening : String read FChannel;
   Property CallBack : TBusMessageNotify read FCallBack write FCallBack;
   property Data : TObject read FData Write FData;
+  property ClientID : String read FClientID write FClientID;
+  property AppFilter : String read FAppFilter Write FAppFilter;
 End;
 PTBusClientReader = ^TBusClientReader;
 
@@ -348,7 +373,8 @@ Public
   //Create or Set channel to achieve advanced behaviour (Memory Persitance, Queue)
   Procedure CreateOrSetChannel( aChannelName : String;
                                 aChannelBehaviourType : TBusChannelBehaviour;
-                                Const aMessageWillBePersistent : Boolean = False);
+                                const aMessageWillBePersistent : Boolean = False;
+                                const EchoEnabled : Boolean = True);
   //Set an event, which will trig when a message is delivered on this channel.
   //Warning : It it the thread of the bus whitch will process the event ! Keep it thread safe and beware
   //          to not take too many time in this event : Other message will not be dispached during this time.
@@ -470,14 +496,19 @@ Public
   // Out : Id of message.
   // In : aMessage : The Message payload
   //      aTargetChannel : The channel where the message will be sent.
-  //      aSomeAdditionalData : this data will be carried in envelop, not in the message.
   //      aResponsechannel : Used for indicate on wich channel an (eventual) response must be sent.
-  //      IsPersistent : If True, the message will be marked as MemoryPersistent in the channel.
+  //      clientIdSignature : You can put a clientID here to indicate the message origin. Use with TChannel.ChannelEchoEnabled
+  //      AppFilter : if the AppFilter in not empty (''), message will be delivered *only* to the client which have the same Appfilter.
+  //                  If the AppFilter is empty, the nessage will be delivered to all cient, regardless to their own AppFilter.
+  //      aSomeAdditionalData : this data will be carried in envelop, not in the message, usage on your own (used in keyvalue process, for example).
+  //      IsPersistent : If True, the message will be marked as MemoryPersistent in the channel and will be delivered to new subscribter.
   Function Send( var aMessage : TBusMessage;
                  const aTargetChannel : String;
                  const aSomeAdditionalData : String = '';
                  const aResponseChannel : string = '';
-                 const IsPersistent : Boolean = False) : Int64;
+                 const IsPersistent : Boolean = False;
+                 const ClientIDSignature : String = '';
+                 const AppFilter : String = '') : Int64;
 
   // Retrieve messages
   // In :  aClientReadeds : Client previously subscribted to channel.
@@ -526,7 +557,8 @@ Public
   procedure ChannelDelete(aChannelName : string);
   procedure ChannelSet( aChannelName : String;
                         aChannelBehaviourType : TBusChannelBehaviour;
-                        Const aMessageWillBePersistent : Boolean = False);
+                        Const aMessageWillBePersistent : Boolean = False;
+                        Const EchoEnabled : Boolean = true);
   procedure ChannelSetAsTopic( aChannelName : String;
                         Const aMessageWillBePersistent : Boolean = False;
                         Const aMessageCountLimit : Integer = -1);
@@ -577,10 +609,12 @@ Public
   Function UnSubscribe(aClient : TBusClientReader) : Boolean;
 
   Function Send( var aMessage : TBusMessage;
-                 aTargetChannel : String;
+                 const aTargetChannel : String;
                  const aSomeAdditionalData : String = '';
                  const aResponseChannel : string = '';
-                 const IsPersistent : Boolean = False) : Int64;
+                 const IsPersistent : Boolean = False;
+                 const ClientIDSignature : String = '';
+                 const AppFilter : String = '') : Int64;
 
   Function Recv( const aClientReaders : Array of TBusClientReader;
                  const Messages : TBusEnvelopList;
@@ -602,8 +636,9 @@ Public
   // Out : aResponse : The response message. If there are more than one message,
   // first only will be presented.
   // Note : This method use above's Send and Recv (With WaitForMessage = true) methods.
-  Function SendAndRecv( aClient : TBusClientReader;
-                        var aMessage, aResponse : TBusEnvelop) : UInt32;
+  Function SendAndRecv( const aClient : TBusClientReader;
+                        aMessage : TBusEnvelop;
+                        var aResponse : TBusEnvelop) : UInt32;
 
 
   Procedure GetChannelsConfigurationAsCSV(var aStr : TStringList);
@@ -618,7 +653,8 @@ Public
   Procedure ChannelDelete(aChannelName : string);
   Procedure ChannelSet( aChannelName : String;
                         aChannelBehaviourType : TBusChannelBehaviour;
-                        Const aMessageWillBePersistent : Boolean = False);
+                        Const aMessageWillBePersistent : Boolean = False;
+                        Const EchoEnabled : Boolean = true);
   procedure ChannelSetAsTopic( aChannelName : String;
                         Const aMessageWillBePersistent : Boolean = False;
                         Const aMessageCountLimit : Integer = -1);
@@ -941,13 +977,20 @@ begin
   end;
 end;
 
-procedure TBusSystem.ChannelSet(aChannelName: String;
-  aChannelBehaviourType: TBusChannelBehaviour;
-  const aMessageWillBePersistent: Boolean);
+procedure TBusSystem.ChannelSet( aChannelName : String;
+                        aChannelBehaviourType : TBusChannelBehaviour;
+                        Const aMessageWillBePersistent : Boolean = False;
+                        Const EchoEnabled : Boolean = true);
 begin
-  FChannels.CreateOrSetChannel( aChannelName,
-                                aChannelBehaviourType,
-                                aMessageWillBePersistent);
+  FChannels.Lock;
+  try
+    FChannels.CreateOrSetChannel( aChannelName,
+                                  aChannelBehaviourType,
+                                  aMessageWillBePersistent,
+                                  EchoEnabled);
+  finally
+    FChannels.Unlock;
+  end;
 end;
 
 procedure TBusSystem.ChannelSetAsQueue( aChannelName : String;
@@ -1247,11 +1290,11 @@ var i : Integer;
       end;
     end;
 
-    Function GetIsChannelPersistent : String;
+    Function BoolToPlainEnglish(ab : Boolean) : string;
     begin
       result := 'No';
-      if c.MessageInThisChannelWillBeSetAsPersistent then
-        result := 'Yes';
+      if ab then
+        result:= 'Yes';
     end;
 begin
 //  if Terminated then
@@ -1265,6 +1308,7 @@ begin
     s2.Add('ChannelName');
     s2.Add('ChannelType');
     s2.Add('IsChannelPersistent');
+    s2.Add('EchoEnabled');
     s2.Add('ReceivedMessageCount');
     s2.Add('ConsumedMessageCount');
     s2.Add('DeliveredMessageCount');
@@ -1277,7 +1321,8 @@ begin
       s2.Clear;
       s2.Add(c.ChannelName);
       s2.Add(GetChannelType);
-      s2.Add(GetIsChannelPersistent);
+      s2.Add(BoolToPlainEnglish(c.MessageInThisChannelWillBeSetAsPersistent));
+      s2.Add(BoolToPlainEnglish(c.ChannelEchoEnabled));
       s2.Add(IntToStr(c.ReceivedMessageCount));
       s2.Add(IntToStr(c.ConsumedMessageCount));
       s2.Add(IntToStr(c.DeliveredMessageCount));
@@ -1490,11 +1535,13 @@ begin
   result := Messages.Items.Count;
 end;
 
-Function TBusSystem.Send( var aMessage: TBusMessage;
-                    const aTargetChannel : String;
-                    const aSomeAdditionalData : String;
-                    const aResponseChannel : String;
-                    const IsPersistent : Boolean) : Int64;
+Function TBusSystem.Send(  var aMessage : TBusMessage;
+                 const aTargetChannel : String;
+                 const aSomeAdditionalData : String = '';
+                 const aResponseChannel : string = '';
+                 const IsPersistent : Boolean = False;
+                 const ClientIDSignature : String = '';
+                 const AppFilter : String = '') : Int64;
 var aPacket : PTBusEnvelop;
     L : TList_PTBusEnvelop;
     lTempChannel : String;
@@ -1517,6 +1564,8 @@ var aPacket : PTBusEnvelop;
       aPacket^.ResponseChannel := aResponseChannel;
       aPacket^.ContentMessage := aMessage; //Deep copy;
       aPacket^.Persistent := IsPersistent;
+      aPacket^.ClientSourceId := ClientIDSignature;
+      aPacket^.AppFilter := AppFilter;
       Result := aPacket^.EnvelopId;
       L := FWaitMessageList.Lock;
       try
@@ -1530,7 +1579,6 @@ var aPacket : PTBusEnvelop;
 begin
   Assert(aTargetchannel<>'');
   Result := 0;
-
   //Send message with full targetname.
   InternalSendMessage(aTargetChannel);
 end;
@@ -1652,6 +1700,8 @@ begin
           aPacket^.ResponseChannel := llo[i]^.ResponseChannel;
           aPacket^.ContentMessage := llo[i]^.ContentMessage; //Deep copy;
           aPacket^.Persistent := llo[i]^.Persistent;
+          aPacket^.ClientSourceId := llo[i]^.ClientSourceId;
+          aPacket^.AppFilter := llo[i]^.AppFilter;
           ll.Add(aPacket);
         end;
       finally
@@ -1810,7 +1860,7 @@ begin
   FBusChannelData.FReceivedMessageCount := 0;
   FBusChannelData.FConsumedMessageCount := 0;
   FBusChannelData.FMessageInThisChannelWillBeSetAsPersistent:= false;
-
+  FChannelEchoEnabled := true;
   FDataProtect := TCriticalSection.Create;
   FChannelMessageCountLimitation := -1; //No limit.
   FSubscribters := TBusClientReaderList.Create;
@@ -1841,6 +1891,8 @@ var packet : PTBusEnvelop;
     lc : TBusClientReader;
     lmp, ll : TList_PTBusEnvelop;
     i,j : Integer;
+    proceed : boolean;
+
 
     procedure Duplicate;
     begin
@@ -1851,6 +1903,8 @@ var packet : PTBusEnvelop;
       packet^.ResponseChannel := mes^.ResponseChannel;
       packet^.Persistent := mes^.Persistent;
       packet^.ContentMessage := mes^.ContentMessage; //Deep copy;
+      packet^.ClientSourceId := mes^.ClientSourceId;
+      packet^.AppFilter := mes^.AppFilter;
     end;
 
     procedure BeforeDeliver;
@@ -1884,12 +1938,23 @@ var packet : PTBusEnvelop;
       ll := lc.ClientMessageStack.Lock;
       try
         mes := aMessage;
-        Duplicate;
-        ll.Add(packet);
-        IncDeliveredMessageCount;
+        proceed := true;
 
-        if assigned(lc.Event) then
-          lc.Event.SetEvent; //If this reader is waiting somewhere in a thread, it will be trig.
+        if mes^.AppFilter<>'' then
+          proceed := mes^.AppFilter = lc.AppFilter;
+
+        if proceed and Not ChannelEchoEnabled then
+          proceed := (mes.ClientSourceId <> lc.ClientID);
+
+        if proceed then
+        begin
+          Duplicate;
+          ll.Add(packet);
+          IncDeliveredMessageCount;
+
+          if assigned(lc.Event) then
+            lc.Event.SetEvent; //If this reader is waiting somewhere in a thread, it will be trig.
+        end;
       finally
         lc.ClientMessageStack.Unlock;
       end;
@@ -1903,9 +1968,20 @@ var packet : PTBusEnvelop;
         for i := 0 to aList.Count-1 do
         begin
           mes := aList[i];
-          Duplicate;
-          ll.Add(packet);
-          IncDeliveredMessageCount;
+          proceed := true;
+
+          if mes^.AppFilter<>'' then
+            proceed := mes^.AppFilter = lc.AppFilter;
+
+          if proceed and Not ChannelEchoEnabled then
+            proceed := (mes.ClientSourceId <> lc.ClientID);
+
+          if proceed then
+          begin
+            Duplicate;
+            ll.Add(packet);
+            IncDeliveredMessageCount;
+          end;
         end;
 
         if assigned(lc.Event) then
@@ -2245,9 +2321,10 @@ begin
   FMaster := aBus;
 end;
 
-procedure TBusChannelList.CreateOrSetChannel(aChannelName: String;
-  aChannelBehaviourType: TBusChannelBehaviour;
-  Const aMessageWillBePersistent : Boolean);
+procedure TBusChannelList.CreateOrSetChannel(aChannelName : String;
+                                aChannelBehaviourType : TBusChannelBehaviour;
+                                const aMessageWillBePersistent : Boolean = False;
+                                const EchoEnabled : Boolean = True);
 var cl : TObjectDictionary_BusChannel;
     i : integer;
     c : TBusChannel;
@@ -2261,6 +2338,7 @@ Begin
 
   c.ChannelBehaviour := aChannelBehaviourType;
   c.MessageInThisChannelWillBeSetAsPersistent := aMessageWillBePersistent;
+  c.ChannelEchoEnabled := EchoEnabled;
 end;
 
 procedure TBusChannelList.DeleteChannel(aChannelName: string);
@@ -2359,12 +2437,17 @@ end;
 { TBusClientReader }
 
 constructor TBusClientReader.Create(aBus : TBusSystem; aChannelName : String; aCallBack: TBusMessageNotify);
+var Fg : TGUID;
 begin
   Assert(aChannelName <> EmptyStr);
   Inherited Create(aBus);
   FCallBack := aCallBack;
   FChannel := aChannelName;
   FProcessMessageCount := 0;
+
+  Fg := TGUID.NewGuid;
+  FClientID := Fg.ToString;
+  FAppFilter := '';
 end;
 
 
@@ -2558,11 +2641,12 @@ begin
   sys.ChannelDelete(aChannelName);
 end;
 
-procedure TBus.ChannelSet(aChannelName: String;
-  aChannelBehaviourType: TBusChannelBehaviour;
-  const aMessageWillBePersistent: Boolean);
+procedure TBus.ChannelSet( aChannelName : String;
+                        aChannelBehaviourType : TBusChannelBehaviour;
+                        Const aMessageWillBePersistent : Boolean = False;
+                        Const EchoEnabled : Boolean = true);
 begin
-  sys.ChannelSet(aChannelName,aChannelBehaviourType,aMessageWillBePersistent);
+  sys.ChannelSet(aChannelName,aChannelBehaviourType,aMessageWillBePersistent,EchoEnabled);
 end;
 
 procedure TBus.ChannelSetAsQueue( aChannelName : String;
@@ -2661,15 +2745,26 @@ begin
   result := Sys.Recv(aClientReaders,Messages,WaitForMessage);
 end;
 
-function TBus.Send(var aMessage: TBusMessage; aTargetChannel: String;
-  const aSomeAdditionalData, aResponseChannel: string;
-  const IsPersistent: Boolean): Int64;
+function TBus.Send( var aMessage : TBusMessage;
+                 const aTargetChannel : String;
+                 const aSomeAdditionalData : String = '';
+                 const aResponseChannel : string = '';
+                 const IsPersistent : Boolean = False;
+                 const ClientIDSignature : String = '';
+                 const AppFilter : String = ''): Int64;
 begin
-  result := sys.Send(aMessage, aTargetChannel,aSomeAdditionalData,aResponseChannel,IsPersistent);
+  result := sys.Send( aMessage,
+                      aTargetChannel,
+                      aSomeAdditionalData,
+                      aResponseChannel,
+                      IsPersistent,
+                      ClientIDSignature,
+                      AppFilter);
 end;
 
-function TBus.SendAndRecv(aClient: TBusClientReader;
-  var aMessage, aResponse: TBusEnvelop): UInt32;
+function TBus.SendAndRecv( const aClient : TBusClientReader;
+                        aMessage : TBusEnvelop;
+                        var aResponse : TBusEnvelop): UInt32;
 
 var lmb : TBusEnvelopList;
     n : TDateTime;
@@ -2699,7 +2794,7 @@ begin
     end
     else
     begin
-      raise Exception.Create('Error Message');
+      raise Exception.Create('SendAndRecv Error Message');
     end;
   finally
     FreeAndNil(lmb);
@@ -3073,6 +3168,14 @@ begin
   WriteDateTime(aStream,Now);
   WriteString(aStream,Data);
 end;
+
+{ TBusChannelPrivacy }
+
+constructor TBusChannelPrivacy.Create;
+begin
+  FKeyPass := '{7FDB0206-5775-492C-B8EF-5D8642C02BF6}'; //Or put whatever you want.
+end;
+
 
 Initialization
 FBusGL := TCriticalSection.Create;

@@ -206,6 +206,9 @@ object Form2: TForm2
               Width = 70
             end
             item
+              Caption = 'Echo'
+            end
+            item
               Caption = 'Received'
               Width = 70
             end
@@ -357,6 +360,16 @@ object Form2: TForm2
           Height = 17
           Caption = 'Memory persistant channel'
           TabOrder = 19
+        end
+        object cbEchoEnabled: TCheckBox
+          Left = 208
+          Top = 186
+          Width = 97
+          Height = 17
+          Caption = 'Echo enabled'
+          Checked = True
+          State = cbChecked
+          TabOrder = 20
         end
       end
     end
