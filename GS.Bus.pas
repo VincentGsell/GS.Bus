@@ -36,7 +36,7 @@
 /// 20190606 - VGS - Introduce AppFilter for channel privacy : Two client with same AppFilter can
 ///                  communicate directly.
 ///                - Introduce ClientId, to follow the author of a message on a reader point of view.
-///                - Introduce ChannelEchoEnabled (Default:True) : To allow or not "echo" effect :
+///                - Introduce ChannelEchoEnabled (Default:False) : To allow or not "echo" effect.
 ///-------------------------------------------------------------------------------
 unit GS.Bus;
 
@@ -332,7 +332,7 @@ Protected
   FCallBack: TBusMessageNotify;
   FChannel: String;
   FData: TObject;
-  FClientID: String;
+  FClientBusID: String;
   FAppFilter: String;
 
   function GetClientProcessMessageCount: Int64; Override;
@@ -345,7 +345,7 @@ Public
   Property ChannelListening : String read FChannel;
   Property CallBack : TBusMessageNotify read FCallBack write FCallBack;
   property Data : TObject read FData Write FData;
-  property ClientID : String read FClientID write FClientID;
+  property ClientBusID : String read FClientBusID write FClientBusID;
   property AppFilter : String read FAppFilter Write FAppFilter;
 End;
 PTBusClientReader = ^TBusClientReader;
@@ -958,10 +958,12 @@ begin
 
             New(mpPacketMailBox);
             mpPacketMailBox^.EnvelopId := mcl2[i]^.EnvelopId;
-            mpPacketMailBox^.AdditionalData := mcl2[i]^.AdditionalData;
             mpPacketMailBox^.TargetChannel := mcl2[i]^.TargetChannel;
             mpPacketMailBox^.ResponseChannel := mcl2[i]^.ResponseChannel;
+            mpPacketMailBox^.AdditionalData := mcl2[i]^.AdditionalData;
             mpPacketMailBox^.ContentMessage := mcl2[i]^.ContentMessage; //Deep copy;
+            mpPacketMailBox^.ClientSourceId := mcl2[i]^.ClientSourceId;
+            mpPacketMailBox^.AppFilter := mcl2[i]^.AppFilter;
             mpPacketMailBox^.Persistent := mcl2[i]^.Persistent;
             //mMailBoy is local (parameter) no need to lock/unlock for access.
             aMailBox.Items.Add(mpPacketMailBox);
@@ -1860,7 +1862,7 @@ begin
   FBusChannelData.FReceivedMessageCount := 0;
   FBusChannelData.FConsumedMessageCount := 0;
   FBusChannelData.FMessageInThisChannelWillBeSetAsPersistent:= false;
-  FChannelEchoEnabled := true;
+  FChannelEchoEnabled := False; //Bus behaviour (MQTT, KissBe...)
   FDataProtect := TCriticalSection.Create;
   FChannelMessageCountLimitation := -1; //No limit.
   FSubscribters := TBusClientReaderList.Create;
@@ -1944,7 +1946,7 @@ var packet : PTBusEnvelop;
           proceed := mes^.AppFilter = lc.AppFilter;
 
         if proceed and Not ChannelEchoEnabled then
-          proceed := (mes.ClientSourceId <> lc.ClientID);
+          proceed := (mes.ClientSourceId <> lc.ClientBusID);
 
         if proceed then
         begin
@@ -1974,7 +1976,7 @@ var packet : PTBusEnvelop;
             proceed := mes^.AppFilter = lc.AppFilter;
 
           if proceed and Not ChannelEchoEnabled then
-            proceed := (mes.ClientSourceId <> lc.ClientID);
+            proceed := (mes.ClientSourceId <> lc.ClientBusID);
 
           if proceed then
           begin
@@ -2446,7 +2448,7 @@ begin
   FProcessMessageCount := 0;
 
   Fg := TGUID.NewGuid;
-  FClientID := Fg.ToString;
+  FClientBusID := Fg.ToString;
   FAppFilter := '';
 end;
 
