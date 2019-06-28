@@ -307,6 +307,7 @@ Public
   Function ServiceIndex(aService : TCustomService) : Integer; Virtual;
 
   Function StatsTask : String;
+
   Function StatsServices : String;
 
   Function ServicesLock : TServiceList; //Call with try..

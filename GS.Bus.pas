@@ -1517,6 +1517,7 @@ end;
 //------------------------------------------------------------------------------
 function TBusSystem.Recv(const aClientReader: TBusClientReader;
   const Messages: TBusEnvelopList; const WaitForMessage: Boolean): UInt32;
+var aOb : THandleObject;
 begin
   Assert(assigned(aClientReader));
   if WaitForMessage then
@@ -1987,7 +1988,9 @@ var packet : PTBusEnvelop;
         end;
 
         if assigned(lc.Event) then
+        begin
           lc.Event.SetEvent; //If this reader is waiting somewhere in a thread, it will be trig.
+        end;
 
         begin
           //TODO : We can here evaluate if there are to many message in waiting for a client...
@@ -2780,12 +2783,25 @@ begin
   /// - It lock definetly a thread if bus does not respond. It is not the bus responsability to permit at the other thread to go on.
   /// Please implement on client side the possibility to retry on they level if result is false.
   /// - With this solution, aClient does not need an system event : Economy.
-  Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,aClient.ChannelListening);
   lmb := TBusEnvelopList.Create;
   try
     n := now;
-    while not(Terminated)
-          And(not( now-n > (1/(3600*24))*3) )
+    Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,aClient.ChannelListening);
+    while not(Terminated) And not(TVisibilityThread(CurrentThread).Terminated) do
+    begin
+      Recv(aclient,lmb,true);
+      if lmb.Items.Count>0 then
+      begin
+        Result := lmb.Items.Count;
+        aResponse := lmb.Items[0]^;
+        Break;
+      end
+      else
+    end;
+
+
+{    while not(Terminated)
+          And(not( now-n > (1/(3600*24))*5) )
           And not(TVisibilityThread(CurrentThread).Terminated)
           And (Recv(aclient,lmb,true) = 0) do;
 
@@ -2798,6 +2814,7 @@ begin
     begin
       raise Exception.Create('SendAndRecv Error Message');
     end;
+}
   finally
     FreeAndNil(lmb);
   end;
