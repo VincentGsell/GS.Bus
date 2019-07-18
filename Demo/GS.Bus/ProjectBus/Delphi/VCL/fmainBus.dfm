@@ -71,7 +71,7 @@ object Form2: TForm2
     Top = 50
     Width = 1079
     Height = 667
-    ActivePage = tsDataRepo
+    ActivePage = tsBus
     TabOrder = 1
     object tsBus: TTabSheet
       Caption = 'Basic Bus Features'

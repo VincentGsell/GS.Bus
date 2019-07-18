@@ -1,6 +1,7 @@
 program ProjectRayracerTest;
 
 uses
+  ScaleMM2,
   Vcl.Forms,
   fmainRTProject in 'fmainRTProject.pas' {Form1},
   raytrace in '..\..\raytrace.pas',

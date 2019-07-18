@@ -3,7 +3,7 @@
         <ProjectGuid>{7CF71720-C20A-45D1-8E4B-27694E948AD4}</ProjectGuid>
         <MainSource>ProjectRayracerTest.dpr</MainSource>
         <Base>True</Base>
-        <Config Condition="'$(Config)'==''">Release</Config>
+        <Config Condition="'$(Config)'==''">Debug</Config>
         <TargetedPlatforms>1155</TargetedPlatforms>
         <AppType>Application</AppType>
         <FrameworkType>VCL</FrameworkType>

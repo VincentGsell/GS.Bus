@@ -1,7 +1,11 @@
 program ProjectBus;
 
 uses
+  {$IFDEF DEBUG}
   FastMM4,
+  {$ELSE}
+  ScaleMM2,
+  {$ENDIF}
   Vcl.Forms,
   fmainBus in 'fmainBus.pas' {Form2};
 

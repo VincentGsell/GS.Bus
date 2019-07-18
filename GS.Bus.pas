@@ -72,6 +72,7 @@ Uses
 
 Const
   CST_BUSTIMER = 250; //MilliSec.
+  CST_THREAD_COOLDOWN = 1;
   CST_DATAREPO_DELIMITER = ';';
 
 
@@ -524,22 +525,15 @@ Public
   // Retrieve messages
   // In :  aClientReadeds : Client previously subscribted to channel.
   // out : Messages : List of envelop.
-  // In : WaitForMessages : If True, it wait until message arrive. (Synchrone)
-  //Note : It use process message internally. So, if aClientReaders have
-  //      receive event associate, the event will *NOT* be fired
-  //      with this methods. For event based, Use ProcesMessage instead.
-  //Note2 : This receive *NOT* use client's event at all : It use only Work event
-  //        this is quite intensive, since it check on all message process.
   Function Recv( const aClientReaders : Array of TBusClientReader;
-                 const Messages : TBusEnvelopList;
-                 const WaitForMessage : Boolean = true) : UInt32; Overload;
+                 const Messages : TBusEnvelopList) : UInt32; Overload;
 
   //This one with only one client : It will test the client only.
   //if the client have a system event, it will be used, else, as above, it will
   // be the FWorkOn system event (More intensive)
   Function Recv( const aClientReader : TBusClientReader;
                  const Messages : TBusEnvelopList;
-                 const WaitForMessage : Boolean = true) : UInt32; Overload;
+                 const WaitForMessageWithTimeOut : Boolean = true) : UInt32; Overload;
 
   // Retrieve messages
   // In :  aClientReadeds : Client previously subscribted to channel.
@@ -630,11 +624,10 @@ Public
                  const AppFilter : String = '') : Int64;
 
   Function Recv( const aClientReaders : Array of TBusClientReader;
-                 const Messages : TBusEnvelopList;
-                 const WaitForMessage : Boolean = false) : UInt32; Overload;
+                 const Messages : TBusEnvelopList) : UInt32; Overload;
   Function Recv( const aClientReader : TBusClientReader;
                  const Messages : TBusEnvelopList;
-                 const WaitForMessage : Boolean = false) : UInt32; Overload;
+                 const WaitForMessageWithTimeOut : Boolean = false) : UInt32; Overload;
 
 {  Procedure MessageStatus( const aClientReaders : Array of TBusClientReader;
                           const aClientMessagesCount : Array of UInt32;
@@ -1231,26 +1224,32 @@ var
       end;
     end;
 
-
-begin
-  case FDoWork.WaitFor(CST_BUSTIMER) of
-    wrSignaled :
+    procedure MessageProcess;
     begin
       LocalInternalChannelDispatch;
       LocalInternalChannelProcess;
       LocalInternalIdleUpdate;
     end;
-    wrTimeout :
-    begin
-      //Todo : Generate Idle message ?;
-      LocalInternalIdleUpdate;
-    end;
-    wrAbandoned, wrError {$IFNDEF FPC}, wrIOCompletion {$ENDIF} :
-    begin
-      //Todo : Exception message. Stop ?
-    end;
-  end;
 
+begin
+  if GetMessageWaitingCount>0 then
+    MessageProcess
+  else
+    case FDoWork.WaitFor(CST_BUSTIMER) of
+      wrSignaled :
+      begin
+        MessageProcess;
+      end;
+      wrTimeout :
+      begin
+        //Todo : Generate Idle message ?;
+        LocalInternalIdleUpdate;
+      end;
+      wrAbandoned, wrError {$IFNDEF FPC}, wrIOCompletion {$ENDIF} :
+      begin
+        //Todo : Exception message. Stop ?
+      end;
+    end;
 end;
 
 
@@ -1532,11 +1531,11 @@ end;
 // for the caller thread context.
 //------------------------------------------------------------------------------
 function TBusSystem.Recv(const aClientReader: TBusClientReader;
-  const Messages: TBusEnvelopList; const WaitForMessage: Boolean): UInt32;
+  const Messages: TBusEnvelopList; const WaitForMessageWithTimeOut: Boolean): UInt32;
 var aOb : THandleObject;
 begin
   Assert(assigned(aClientReader));
-  if WaitForMessage then
+  if WaitForMessageWithTimeOut then
     if Assigned(aClientReader.Event) then
       aClientReader.Event.WaitFor(CST_BUSTIMER)
     else
@@ -1546,10 +1545,10 @@ begin
 end;
 
 function TBusSystem.Recv(const aClientReaders: array of TBusClientReader;
-  const Messages: TBusEnvelopList; const WaitForMessage: Boolean): UInt32;
+  const Messages: TBusEnvelopList): UInt32;
+var i : integer;
+    ldetect : boolean;
 begin
-  if WaitForMessage then
-    FDoWork.WaitFor(CST_BUSTIMER);
   BusProcessMessages(aClientReaders,Messages);
   result := Messages.Items.Count;
 end;
@@ -2772,15 +2771,15 @@ begin
 end;
 
 function TBus.Recv(const aClientReader: TBusClientReader;
-  const Messages: TBusEnvelopList; const WaitForMessage: Boolean): UInt32;
+  const Messages: TBusEnvelopList; const WaitForMessageWithTimeOut: Boolean): UInt32;
 begin
-  result := Sys.Recv(aClientReader,Messages,WaitForMessage);
+  result := Sys.Recv(aClientReader,Messages,WaitForMessageWithTimeOut);
 end;
 
 function TBus.Recv(const aClientReaders: array of TBusClientReader;
-  const Messages: TBusEnvelopList; const WaitForMessage: Boolean): UInt32;
+  const Messages: TBusEnvelopList): UInt32;
 begin
-  result := Sys.Recv(aClientReaders,Messages,WaitForMessage);
+  result := Sys.Recv(aClientReaders,Messages);
 end;
 
 function TBus.Send( var aMessage : TBusMessage;
