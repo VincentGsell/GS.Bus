@@ -32,8 +32,10 @@ object Form2: TForm2
     Width = 1079
     Height = 41
     Anchors = [akLeft, akTop, akRight]
-    Caption = 'Panel1'
     TabOrder = 0
+    DesignSize = (
+      1079
+      41)
     object Label8: TLabel
       Left = 4
       Top = 14
@@ -41,26 +43,48 @@ object Form2: TForm2
       Height = 13
       Caption = 'Label8'
     end
+    object GroupBox1: TGroupBox
+      Left = 155
+      Top = 2
+      Width = 912
+      Height = 35
+      Anchors = [akLeft, akTop, akRight]
+      Caption = ' Bus Stats'
+      TabOrder = 0
+      object Label4: TLabel
+        Left = 15
+        Top = 17
+        Width = 95
+        Height = 13
+        Caption = 'Message Sended'
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -11
+        Font.Name = 'Tahoma'
+        Font.Style = [fsBold]
+        ParentFont = False
+      end
+    end
   end
   object PageControl1: TPageControl
     Left = 8
     Top = 50
-    Width = 1074
-    Height = 615
-    ActivePage = tsBus
+    Width = 1079
+    Height = 667
+    ActivePage = tsDataRepo
     TabOrder = 1
     object tsBus: TTabSheet
       Caption = 'Basic Bus Features'
       object pnl2: TPanel
         Left = 0
         Top = 0
-        Width = 1066
-        Height = 587
+        Width = 1071
+        Height = 639
         Align = alClient
         TabOrder = 0
         DesignSize = (
-          1066
-          587)
+          1071
+          639)
         object Label3: TLabel
           Left = 151
           Top = 13
@@ -70,21 +94,21 @@ object Form2: TForm2
         end
         object Label2: TLabel
           Left = 728
-          Top = 96
+          Top = 59
           Width = 158
           Height = 13
           Caption = 'GUI Received event'#39's hit count : '
         end
         object Label1: TLabel
           Left = 892
-          Top = 96
+          Top = 59
           Width = 6
           Height = 13
           Caption = '0'
         end
         object lblChannels: TLabel
           Left = 436
-          Top = 96
+          Top = 59
           Width = 123
           Height = 13
           Caption = 'Channels (Data from Bus)'
@@ -124,7 +148,7 @@ object Form2: TForm2
           Left = 16
           Top = 304
           Width = 393
-          Height = 272
+          Height = 324
           Anchors = [akLeft, akTop, akBottom]
           ItemHeight = 13
           TabOrder = 2
@@ -140,8 +164,8 @@ object Form2: TForm2
         end
         object btn3: TButton
           Tag = 1000
-          Left = 583
-          Top = 58
+          Left = 582
+          Top = 22
           Width = 129
           Height = 31
           Caption = 'Send 1000 Messages'
@@ -149,8 +173,8 @@ object Form2: TForm2
           OnClick = btn3Click
         end
         object btn1: TButton
-          Left = 431
-          Top = 41
+          Left = 430
+          Top = 5
           Width = 129
           Height = 49
           Caption = 'Send Message'
@@ -160,8 +184,8 @@ object Form2: TForm2
         object lvSubscripters: TListView
           Left = 431
           Top = 304
-          Width = 627
-          Height = 272
+          Width = 632
+          Height = 324
           Anchors = [akLeft, akTop, akRight, akBottom]
           Columns = <
             item
@@ -187,10 +211,10 @@ object Form2: TForm2
           ViewStyle = vsReport
         end
         object ListView2: TListView
-          Left = 431
-          Top = 115
-          Width = 627
-          Height = 164
+          Left = 436
+          Top = 78
+          Width = 632
+          Height = 201
           Anchors = [akLeft, akTop, akRight]
           Columns = <
             item
@@ -233,55 +257,33 @@ object Form2: TForm2
           TabOrder = 7
           ViewStyle = vsReport
         end
-        object GroupBox1: TGroupBox
-          Left = 436
-          Top = 0
-          Width = 620
-          Height = 35
-          Anchors = [akLeft, akTop, akRight]
-          Caption = ' Bus Stats'
-          TabOrder = 8
-          object Label4: TLabel
-            Left = 15
-            Top = 17
-            Width = 95
-            Height = 13
-            Caption = 'Message Sended'
-            Font.Charset = DEFAULT_CHARSET
-            Font.Color = clWindowText
-            Font.Height = -11
-            Font.Name = 'Tahoma'
-            Font.Style = [fsBold]
-            ParentFont = False
-          end
-        end
         object Button3: TButton
           Tag = 50000
-          Left = 848
-          Top = 58
+          Left = 847
+          Top = 22
           Width = 129
           Height = 31
           Caption = 'Send 50K Messages (!)'
-          TabOrder = 9
+          TabOrder = 8
           OnClick = btn3Click
         end
         object Button4: TButton
           Tag = 10000
-          Left = 716
-          Top = 58
+          Left = 715
+          Top = 22
           Width = 129
           Height = 31
           Caption = 'Send 10K Messages'
-          TabOrder = 10
+          TabOrder = 9
           OnClick = btn3Click
         end
         object cbThreadedSend: TCheckBox
-          Left = 583
-          Top = 41
+          Left = 582
+          Top = 5
           Width = 97
           Height = 17
           Caption = 'Threaded send'
-          TabOrder = 11
+          TabOrder = 10
         end
         object btTest: TButton
           Left = 16
@@ -289,7 +291,7 @@ object Form2: TForm2
           Width = 233
           Height = 25
           Caption = 'Test 1 (Create channels list)'
-          TabOrder = 12
+          TabOrder = 11
           OnClick = btTestClick
         end
         object btTest2: TButton
@@ -298,7 +300,7 @@ object Form2: TForm2
           Width = 233
           Height = 25
           Caption = 'Test 2 (Launch messages on all channel)'
-          TabOrder = 13
+          TabOrder = 12
           OnClick = btTest2Click
         end
         object RadioGroup1: TRadioGroup
@@ -311,7 +313,7 @@ object Form2: TForm2
           Items.Strings = (
             'Topic'
             'Queue')
-          TabOrder = 14
+          TabOrder = 13
           OnClick = RadioGroup1Click
         end
         object Edit2: TEdit
@@ -319,7 +321,7 @@ object Form2: TForm2
           Top = 88
           Width = 74
           Height = 21
-          TabOrder = 15
+          TabOrder = 14
           Text = '-1'
         end
         object UpDown1: TUpDown
@@ -330,7 +332,7 @@ object Form2: TForm2
           Associate = Edit2
           Min = -1
           Position = -1
-          TabOrder = 16
+          TabOrder = 15
         end
         object RadioGroup2: TRadioGroup
           Left = 311
@@ -341,7 +343,7 @@ object Form2: TForm2
           Items.Strings = (
             'Fault tolerant'
             'Distributed')
-          TabOrder = 17
+          TabOrder = 16
           Visible = False
         end
         object Button5: TButton
@@ -350,7 +352,7 @@ object Form2: TForm2
           Width = 75
           Height = 25
           Caption = 'Apply'
-          TabOrder = 18
+          TabOrder = 17
           OnClick = Button5Click
         end
         object chkMemPersistant: TCheckBox
@@ -359,7 +361,7 @@ object Form2: TForm2
           Width = 198
           Height = 17
           Caption = 'Memory persistant channel'
-          TabOrder = 19
+          TabOrder = 18
         end
         object cbEchoEnabled: TCheckBox
           Left = 208
@@ -369,7 +371,7 @@ object Form2: TForm2
           Caption = 'Echo enabled'
           Checked = True
           State = cbChecked
-          TabOrder = 20
+          TabOrder = 19
         end
       end
     end
@@ -377,12 +379,12 @@ object Form2: TForm2
       Caption = 'In Memory DataRepo'
       ImageIndex = 1
       DesignSize = (
-        1066
-        587)
+        1071
+        639)
       object Button1: TButton
         Left = 3
         Top = 102
-        Width = 198
+        Width = 203
         Height = 46
         Anchors = [akLeft, akTop, akRight]
         Caption = 'Create new dataRepo'
@@ -392,7 +394,7 @@ object Form2: TForm2
       object Edit1: TEdit
         Left = 3
         Top = 75
-        Width = 198
+        Width = 203
         Height = 21
         Anchors = [akLeft, akTop, akRight]
         TabOrder = 1
@@ -401,7 +403,7 @@ object Form2: TForm2
       object Memo1: TMemo
         Left = 3
         Top = 0
-        Width = 1060
+        Width = 1065
         Height = 69
         Anchors = [akLeft, akTop, akRight]
         Color = 11788021
@@ -424,7 +426,7 @@ object Form2: TForm2
       object ListBox1: TListBox
         Left = 3
         Top = 154
-        Width = 198
+        Width = 203
         Height = 394
         Anchors = [akLeft, akTop, akRight]
         ItemHeight = 13

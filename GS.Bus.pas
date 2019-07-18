@@ -37,6 +37,10 @@
 ///                  communicate directly.
 ///                - Introduce ClientId, to follow the author of a message on a reader point of view.
 ///                - Introduce ChannelEchoEnabled (Default:False) : To allow or not "echo" effect.
+/// 20190717 - VGS - remove FWaitingMessage list, this liste permited 0 wait on sending message, but
+///                  introduce memory problem when message producer send an heavy amount of messages.
+///                  those messages were not processed fast enough. With this new version,
+//                   since it is delivered directly to relevant channel, there are no more  memory problem.
 ///-------------------------------------------------------------------------------
 unit GS.Bus;
 
@@ -63,6 +67,7 @@ Uses
 {$ENDIF}
   GS.Stream,
   GS.Common,
+  GS.CPUUsage,
   GS.Threads.Pool;
 
 Const
@@ -106,6 +111,7 @@ TBusEnvelop = packed Record
   Persistent : Boolean;
   ClientSourceId : String;
   AppFilter : String;
+  CreateTag : Uint64;
 End;
 
 TBusMessageNotify = Procedure(Sender : TBusSystem; aReader : TBusClientReader; Var Packet : TBusEnvelop) Of Object;
@@ -162,7 +168,7 @@ TBusChannelPrivacy = Class(TBusChannelAdditionalInformation)
 private
   FKeyPass: String;
 Public
-  Constructor Create; virtual;
+  Constructor Create; reintroduce;
   property KeyPass : String read FKeyPass Write FKeyPass;
 End;
 
@@ -213,6 +219,7 @@ TOnBusChannelBeforeDeliverMessage = Procedure(Var aMessage : TBusEnvelop) of Obj
 TBusChannel = Class
 private
 Protected
+  FProtect : TCriticalSection;
   FDataProtect : TCriticalSection;
   FBusChannelData : TBusChannelData;
   FOnBeforeDeliverMessage: TOnBusChannelBeforeDeliverMessage;
@@ -249,13 +256,15 @@ Protected
   Function ProcessingMessageLock : TList_PTBusEnvelop;
   Procedure ProcessingMessageMessageUnlock;
   Function PersistentMessageLock : TList_PTBusEnvelop;
-
   Procedure PersistentMessageUnlock;
 
   procedure IncReceivedMessageCount;
   procedure IncConsumedMessageCount;
   procedure IncDeliveredMessageCount;
 Public
+  procedure Lock;
+  procedure Unlock;
+
   Constructor Create(aBus : TBusSystem; aChannelName : string); Reintroduce;
   Destructor Destroy; Override;
 
@@ -385,6 +394,9 @@ Public
   procedure Lock;
   function GetLockedList : TObjectDictionary_BusChannel;
   Procedure Unlock;
+
+  //Multithread iterator : Given channel is locked.
+  function GetLockChannel(index: Uint32; var channel : TBusChannel) : Boolean;
 end;
 
 {$IFDEF USE_GENERIC}
@@ -450,7 +462,6 @@ Private
 
   FInternalMessageIdGenerator : Int64;               //Message generator ID. Not used today (Just a incremental), certainly better system when needed.
   FWaitMessageList : TBusEnvelopList;                //Message pending. (Where clients post)
-  FMessageList : TBusEnvelopList;                    //Message list (TBusSystem use this list to distribute effectively).
 protected
   FChannels : TBusChannelList;                       //List of all channels.
 private
@@ -458,7 +469,6 @@ private
   FAllBusSubscribters : TBusClientReaderList;              //Raw Subscripter list. Reference. : WARNING : In channel object, there is shortcut to content object. Keep it synchro.
   FDataRepo : TObjectDictionary_StringStream;
   FInternalEventList : TObjectList_TEvent;
-  FInternalTempChanlist : TObjectDictionary_BusChannel;
 
   FIdle : Boolean;
 
@@ -472,6 +482,7 @@ private
   function GetCallBack_ExceptionEnabled: Boolean;
   procedure SetCallBack_ExceptionEnabled(const Value: Boolean);
   function GetBusIdle: Boolean;
+  function GetMessageWaitingCount: Uint64;
 Protected
 
   Procedure BusShutDown; Virtual;
@@ -579,6 +590,8 @@ Public
   property Log_Enabled : Boolean read GetLog_Enabled write SetLog_Enabled;
   property Idle : Boolean read GetBusIdle;
   property Log_ChannelName : String read GetLog_ChannelName Write SetLog_ChannelName;
+
+  property MessageWaitingCount : Uint64 read GetMessageWaitingCount;
 End;
 
 
@@ -618,10 +631,10 @@ Public
 
   Function Recv( const aClientReaders : Array of TBusClientReader;
                  const Messages : TBusEnvelopList;
-                 const WaitForMessage : Boolean = true) : UInt32; Overload;
+                 const WaitForMessage : Boolean = false) : UInt32; Overload;
   Function Recv( const aClientReader : TBusClientReader;
                  const Messages : TBusEnvelopList;
-                 const WaitForMessage : Boolean = true) : UInt32; Overload;
+                 const WaitForMessage : Boolean = false) : UInt32; Overload;
 
 {  Procedure MessageStatus( const aClientReaders : Array of TBusClientReader;
                           const aClientMessagesCount : Array of UInt32;
@@ -965,7 +978,8 @@ begin
             mpPacketMailBox^.ClientSourceId := mcl2[i]^.ClientSourceId;
             mpPacketMailBox^.AppFilter := mcl2[i]^.AppFilter;
             mpPacketMailBox^.Persistent := mcl2[i]^.Persistent;
-            //mMailBoy is local (parameter) no need to lock/unlock for access.
+            mpPacketMailBox^.CreateTag := mcl2[i]^.CreateTag;
+            //MailBox is local (parameter) no need to lock/unlock for access.
             aMailBox.Items.Add(mpPacketMailBox);
 
             dispose(mcl2[i]);
@@ -1057,9 +1071,7 @@ begin
   FLockPropertyBasic := TCriticalSection.Create;
   FEventListProtect := TCriticalSection.Create;
   FWaitMessageList := TBusEnvelopList.Create;
-  FMessageList := TBusEnvelopList.Create;
   FChannels := TBusChannelList.Create(self);
-  FInternalTempChanlist := TObjectDictionary_BusChannel.Create;
   FAllBusSubscribters := TBusClientReaderList.Create;
   FDoWork := TEvent.Create(nil,False,False,EmptyStr);
   FInternalMessageIdGenerator := 0;
@@ -1113,11 +1125,9 @@ var i : Integer;
 begin
   BusShutdown;
   FreeAndNil(FDoWork);
-  FreeAndNil(FMessageList);
   FreeAndNil(FWaitMessageList);
   FreeAndNil(FAllBusSubscribters);
   FreeAndNil(FChannels);
-  FreeAndNil(FInternalTempChanlist);
   FreeAndNil(FLockStat);
   FreeAndNil(FLockPropertyBasic);
   {$IFDEF USE_GENERIC}
@@ -1140,65 +1150,44 @@ var
     lchans : TObjectDictionary_StringObject;
     channel : TBusChannel;
 
-    Procedure LocalInternalTransfertMessage;
-    var i : Integer;
-    begin
-      //STEP ONE : ALL message in the pending list are transfered for processing (= liberate pending list for new reception)
-      lTempML := FMessageList.Items;
-      lMasterMessageList := FWaitMessageList.Lock;
-      try
-        //transfert message pending.
-        for I := 0 to lMasterMessageList.Count-1 do
-        begin
-          lTempML.Add(lMasterMessageList[i]);
-          AtomicIncrement64(FTotalMessagePending);
-        end;
-        lMasterMessageList.Clear; //do not release message, there are transferered in MessageList.
-      finally
-        FWaitMessageList.Unlock;
-      end;
-    end;
-
     Procedure LocalInternalChannelDispatch;
     var i,j : Integer;
         t : String;
     begin
-      //STEP TWO : All message in processing list are now dispached to the channels.
-      lMasterMessageList := FMessageList.Items;  //MasterMessageList only change in this thread. (No interprocess access)
+      //STEP ONE : All message in processing list are now dispached to the channels.
+      lMasterMessageList := FWaitMessageList.Lock;
+      try
 
+        //Pass 1 : Create all needed channel.
+        For i := 0 to lMasterMessageList.Count-1 do
+        begin
+           FChannels.Lock;
+          try
+            lchans := FChannels.GetLockedList;
+            channel := Nil;
+            if Not(lchans.TryGetValue(lMasterMessageList[i].TargetChannel,TObject(channel))) then
+            begin
+              { TODO -oVGS -cNiceToHave : AutoCreate channel option + according exception }
+              channel := TBusChannel.Create(Self, lMasterMessageList[i].TargetChannel);
+              lchans.Add(lMasterMessageList[i].TargetChannel,channel);
+            end;
+          finally
+            FChannels.Unlock;
+          End;
 
-      FInternalTempChanlist.Clear;
-      //Pass 1 : Create all needed channel.
-      For i := 0 to lMasterMessageList.Count-1 do
-      begin
-
-        FChannels.Lock;
-        try
-          lchans := FChannels.GetLockedList;
-          channel := Nil;
-
-          if Not(lchans.TryGetValue(lMasterMessageList[i].TargetChannel,TObject(channel))) then
-          begin
-            { TODO -oVGS -cNiceToHave : AutoCreate channel option + according exception }
-            channel := TBusChannel.Create(Self, lMasterMessageList[i].TargetChannel);
-            lchans.Add(lMasterMessageList[i].TargetChannel,channel);
+          lTempML := channel.ProcessingMessageLock;
+          try
+            lTempML.Add(lMasterMessageList[i]); //Pointer only.
+            channel.IncReceivedMessageCount;
+          finally
+            channel.ProcessingMessageMessageUnlock;
           end;
 
-        finally
-          FChannels.Unlock;
-        End;
-
-       lTempML := channel.ProcessingMessageLock;
-        try
-          lTempML.Add(lMasterMessageList[i]); //Pointer only.
-          channel.IncReceivedMessageCount;
-        finally
-          channel.ProcessingMessageMessageUnlock;
         end;
-
-        FInternalTempChanlist.AddIfNotAlready(lMasterMessageList[i].TargetChannel,channel);
+        lMasterMessageList.Clear;
+      finally
+        FWaitMessageList.Unlock;
       end;
-      lMasterMessageList.Clear;
     end;
 
     procedure LocalInternalChannelProcess;
@@ -1206,11 +1195,29 @@ var
         l : TStackTaskChannel;
         ll : TList_TStackTask;
         f : boolean;
+
+        chanIndex : Integer;
+        chanCount : Integer;
     begin
-      for i := 0 to FInternalTempChanlist.Count-1 do
-      begin
-        FInternalTempChanlist[i].DoProcessing;
-      end;
+        FChannels.Lock;
+        try
+          lchans := FChannels.GetLockedList;
+          chanCount := lchans.Count;
+        finally
+          FChannels.Unlock;
+        End;
+
+        for chanIndex := 0 to chanCount-1 do
+        begin
+          if FChannels.GetLockChannel(chanIndex,channel) then
+          begin
+            try
+              channel.DoProcessing;
+            finally
+              channel.Unlock;
+            end;
+          end;
+        end;
     end;
 
     procedure LocalInternalIdleUpdate;
@@ -1229,7 +1236,6 @@ begin
   case FDoWork.WaitFor(CST_BUSTIMER) of
     wrSignaled :
     begin
-      LocalInternalTransfertMessage;
       LocalInternalChannelDispatch;
       LocalInternalChannelProcess;
       LocalInternalIdleUpdate;
@@ -1358,6 +1364,15 @@ begin
   end;
 end;
 
+function TBusSystem.GetMessageWaitingCount: Uint64;
+begin
+  try
+    result := FWaitMessageList.Lock.Count;
+  finally
+    FWaitMessageList.Unlock;
+  end;
+end;
+
 function TBusSystem.GetNewEvent: TEvent;
 begin
   FEventListProtect.Acquire;
@@ -1375,7 +1390,8 @@ begin
   //TODO : Jsonify ?
   Result := 'Messages - Send : ' +IntTostr(FTotalMessageSend) +
             ' Pending : ' +IntTostr(FTotalMessagePending) +
-            ' Processed : ' +IntTostr(FTotalMessageProcessed);
+            ' Processed : ' +IntTostr(FTotalMessageProcessed) +
+            ' Current Message Wait : '+IntToStr(MessageWaitingCount);
 end;
 
 procedure TBusSystem.GetSubscribtersConfigurationAsCSV(var aStr: TStringList);
@@ -1569,6 +1585,7 @@ var aPacket : PTBusEnvelop;
       aPacket^.Persistent := IsPersistent;
       aPacket^.ClientSourceId := ClientIDSignature;
       aPacket^.AppFilter := AppFilter;
+      aPacket^.CreateTag := gsGetTickCount;
       Result := aPacket^.EnvelopId;
       L := FWaitMessageList.Lock;
       try
@@ -1647,18 +1664,8 @@ begin
   FChannels.Lock;
   try
     cl := FChannels.GetLockedList;
-    for I := 0 to cl.Count-1 do
-    begin
-      //Channel case sensitive ? Option ? todo...
-      if cl[i].ChannelName = aChannelName then
-      begin
-        aNewChannel := cl[i];
-        Break;
-      end;
-    end;
-
-    if not(Assigned(aNewChannel)) then
-    begin
+    if not cl.TryGetValue(aChannelName,TObject(aNewChannel)) then
+    begin  //Channel does not exists : Exit ;)
       aNewChannel := TBusChannel.Create(Self, aChannelName);
       cl.Add(aChannelName,aNewChannel);
     end;
@@ -1705,6 +1712,7 @@ begin
           aPacket^.Persistent := llo[i]^.Persistent;
           aPacket^.ClientSourceId := llo[i]^.ClientSourceId;
           aPacket^.AppFilter := llo[i]^.AppFilter;
+          aPacket^.CreateTag := llo[i]^.CreateTag;
           ll.Add(aPacket);
         end;
       finally
@@ -1735,17 +1743,7 @@ begin
   FChannels.Lock;
   try
     cl := FChannels.GetLockedList;
-    for I := 0 to cl.Count-1 do
-    begin
-      //Channel case sensitive ? Option ? todo...
-      if cl[i].ChannelName = lChannelName then
-      begin
-        lChannel := cl[i];
-        Break;
-      end;
-    end;
-
-    if not(Assigned(lChannel)) then
+    if not cl.TryGetValue(lChannelName,TObject(lChannel)) then
     begin  //Channel does not exists : Exit ;)
       Exit;
     end;
@@ -1783,13 +1781,14 @@ begin
         cl[i].Subscribters.Lock;
         try
           cd := cl[i].Subscribters.GetLockedList;
-          h := cd.Count; //Message remaining.
+          h := cd.Count; //Subscribters remaining.
         finally
           cl[i].Subscribters.Unlock;
         end;
 
-        if h=0 then //No message.
+        if h=0 then //No Subscribters.
         begin
+          cl[i].Lock;
           cl[i].ProcessingMessageLock;
           cl.Remove(i); //Delete channel
         end;
@@ -1858,6 +1857,7 @@ begin
   Assert(Assigned(aBus));
   Assert(aChannelName<>EmptyStr);
   FMaster := aBus;
+  FProtect := TCriticalSection.Create;
   FBusChannelData := TBusChannelData.Create;
   FBusChannelData.FChannel := aChannelName;
   FBusChannelData.FReceivedMessageCount := 0;
@@ -1883,6 +1883,7 @@ begin
   FreeAndNil(FPersistentMessages);
   FreeAndNil(FProcessingMessages);
   FreeAndNil(FDataProtect);
+  FreeAndNil(FProtect);
   inherited;
 end;
 
@@ -1908,6 +1909,7 @@ var packet : PTBusEnvelop;
       packet^.ContentMessage := mes^.ContentMessage; //Deep copy;
       packet^.ClientSourceId := mes^.ClientSourceId;
       packet^.AppFilter := mes^.AppFilter;
+      packet^.CreateTag := mes^.CreateTag;
     end;
 
     procedure BeforeDeliver;
@@ -2260,6 +2262,11 @@ begin
   AtomicIncrement64(FBusChannelData.FReceivedMessageCount);
 end;
 
+procedure TBusChannel.Lock;
+begin
+  FProtect.Enter;
+end;
+
 function TBusChannel.PersistentMessageLock: TList_PTBusEnvelop;
 begin
   result := FPersistentMessages.Lock;
@@ -2314,6 +2321,11 @@ begin
   end;
 end;
 
+procedure TBusChannel.Unlock;
+begin
+  FProtect.Leave;
+end;
+
 { TBusChannelList }
 
 constructor TBusChannelList.Create(aBus : TBusSystem);
@@ -2341,15 +2353,25 @@ Begin
     FList.Add(aChannelName,c);
   end;
 
-  c.ChannelBehaviour := aChannelBehaviourType;
-  c.MessageInThisChannelWillBeSetAsPersistent := aMessageWillBePersistent;
-  c.ChannelEchoEnabled := EchoEnabled;
+  c.Lock;
+  try
+    c.ChannelBehaviour := aChannelBehaviourType;
+    c.MessageInThisChannelWillBeSetAsPersistent := aMessageWillBePersistent;
+    c.ChannelEchoEnabled := EchoEnabled;
+  finally
+    c.Unlock;
+  end;
 end;
 
 procedure TBusChannelList.DeleteChannel(aChannelName: string);
+var chan : TbusChannel;
 Begin
   Assert(Assigned(Flist));
-  FList.Remove(aChannelName);
+  if FList.TryGetValue(aChannelName, TObject(chan)) then
+  begin
+    chan.Lock;
+    FList.Remove(aChannelName);
+  end;
 end;
 
 destructor TBusChannelList.Destroy;
@@ -2372,15 +2394,10 @@ end;
 function TBusChannelList.IsChannelExists(const aChannelName: String): Boolean;
 var
   I: Integer;
+  ldummy : TObject;
 begin
   Assert(Assigned(Flist));
-  Result := false;
-  for I := 0 to FList.Count-1 do
-  begin
-    Result := FList[i].ChannelName = aChannelName;
-    if Result then
-      Break;
-  end;
+  Result := FList.TryGetValue(aChannelName,ldummy);
 end;
 
 procedure TBusChannelList.Lock;
@@ -2402,6 +2419,22 @@ Begin
     FList.Add(aChannelName,c);
   end;
   c.OnBeforeDeliverMessage := aChannelProc;
+end;
+
+function TBusChannelList.GetLockChannel(index: Uint32; var channel : TBusChannel) : boolean;
+begin
+  result := false;
+  FLock.Acquire;
+  try
+    if FListProcessing.Count>index then
+    begin
+      channel := FListProcessing[index];
+      channel.Lock;
+      result := true;
+    end;
+  finally
+    FLock.Release;
+  end;
 end;
 
 procedure TBusChannelList.Unlock;

@@ -31,8 +31,6 @@ type
     btn1: TButton;
     lvSubscripters: TListView;
     ListView2: TListView;
-    GroupBox1: TGroupBox;
-    Label4: TLabel;
     Button1: TButton;
     Edit1: TEdit;
     Memo1: TMemo;
@@ -63,6 +61,8 @@ type
     Button7: TButton;
     Button8: TButton;
     cbEchoEnabled: TCheckBox;
+    GroupBox1: TGroupBox;
+    Label4: TLabel;
     procedure btn1Click(Sender: TObject);
     procedure btn2Click(Sender: TObject);
     procedure btn3Click(Sender: TObject);
@@ -174,7 +174,7 @@ begin
   la := Bus.Subscribe(edt1.Text,OnReceived);   //La owned by your app : you have to manage it.
   lst2.AddItem('Reader on '+la.ChannelListening,la);
 
-  bus.ChannelSet(edt1.Text,TBusChannelBehaviour.bcbTopic,false,CheckBox1.Checked);
+  bus.ChannelSet(edt1.Text,TBusChannelBehaviour.bcbTopic,false,cbEchoEnabled.Checked);
 end;
 
 procedure TForm2.btn3Click(Sender: TObject);
@@ -392,6 +392,7 @@ var astrSub, asub, astrchan, achan : TStringList;
             lv.SubItems.Add(EmptyStr);
             lv.SubItems.Add(EmptyStr);
             lv.SubItems.Add(EmptyStr);
+            lv.SubItems.Add(EmptyStr);
           end;
 
           ListView2.Items[i].caption := achan[0];
@@ -402,6 +403,7 @@ var astrSub, asub, astrchan, achan : TStringList;
           ListView2.Items[i].SubItems[4] := achan[5];
           ListView2.Items[i].SubItems[5] := achan[6];
           ListView2.Items[i].SubItems[6] := achan[7];
+          ListView2.Items[i].SubItems[7] := achan[8];
         end;
       finally
         ListView2.Items.EndUpdate;
@@ -414,8 +416,8 @@ begin
   aSub := TStringList.Create;
   aChan := TStringList.Create;
   try
-    Bus.GetSubscribtersConfigurationAsCSV(astrSub);
     Bus.GetChannelsConfigurationAsCSV(astrChan);
+    Bus.GetSubscribtersConfigurationAsCSV(astrSub);
 
     //Update list view's GUI.
     GUIUpdateSubList;
