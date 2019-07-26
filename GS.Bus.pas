@@ -92,6 +92,7 @@ TBusMessage = Packed Record
   procedure FromDouble(aD : Double);
   function AsDouble : Double;
   Procedure FromString(const aText : String);
+  Procedure FromStrings(const texts : Array of String);
   Function AsString : String;
   Procedure FromStream(aStream : TStream);
   Procedure ToStream(var aTargetStream : TStream); //No need transfert's stream.
@@ -316,15 +317,18 @@ End;
 TBusClient = Class abstract
 private
 Protected
+  FClientMessageStack : TBusEnvelopList;
   FBus : TBusSystem;
   function GetClientPendingMessageCount: Int64;
   function GetClientProcessMessageCount: Int64; Virtual; Abstract;
 Public
-  ClientMessageStack : TBusEnvelopList;
   Event : TEvent; //Pointer ! Use it for thread use only, *NOT* managed by bus.
 
   Constructor Create(aBus : TBusSystem); Virtual;
   Destructor Destroy; Override;
+
+  function ClientMessageStackLock : TList_PTBusEnvelop;
+  procedure ClientMessageStackUnLock;
 
   Property PendingMessageCount : Int64 read GetClientPendingMessageCount;
   Property ProcessMessageCount : Int64 read GetClientProcessMessageCount;
@@ -598,7 +602,6 @@ private
 protected
   Sys : TBusSystem;
 
-  procedure WaitIdle;
   Procedure Execute; Override;
 Public
   constructor Create; Reintroduce; virtual;
@@ -913,14 +916,14 @@ begin
 
       //aReader.ClientMessageStack *must* be stoped shorter than possible !
       //--> We make a quick transfert of message's pointer form the locked list to another new one.
-      mcl := aReader.ClientMessageStack.Lock;
+      mcl := aReader.ClientMessageStackLock;
       try
         mcl2.Clear;
         for i := 0 to mcl.Count-1 do
           mcl2.Add(mcl[i]); // Pointer copy only !
         mcl.Clear;
       finally
-        aReader.ClientMessageStack.Unlock;
+        aReader.ClientMessageStackUnlock;
       end;
 
 
@@ -1697,7 +1700,7 @@ begin
 
     if tm>0 then
     begin
-      ll := Result.ClientMessageStack.Lock;
+      ll := Result.ClientMessageStackLock;
       llo := aNewChannel.PersistentMessageLock;
       try
         for I := 0 to llo.Count-1 do
@@ -1715,7 +1718,7 @@ begin
           ll.Add(aPacket);
         end;
       finally
-        Result.ClientMessageStack.Unlock;
+        Result.ClientMessageStackUnlock;
         aNewChannel.PersistentMessageUnlock;
       end;
     end;
@@ -1939,7 +1942,7 @@ var packet : PTBusEnvelop;
     procedure DeliverSingleMessage(aMessage : PTBusEnvelop);
     var i : integer;
     begin
-      ll := lc.ClientMessageStack.Lock;
+      ll := lc.ClientMessageStackLock;
       try
         mes := aMessage;
         proceed := true;
@@ -1960,14 +1963,14 @@ var packet : PTBusEnvelop;
             lc.Event.SetEvent; //If this reader is waiting somewhere in a thread, it will be trig.
         end;
       finally
-        lc.ClientMessageStack.Unlock;
+        lc.ClientMessageStackUnlock;
       end;
     end;
 
     procedure DeliverMessage(var aList :  TList_PTBusEnvelop);
     var i : integer;
     begin
-      ll := lc.ClientMessageStack.Lock;
+      ll := lc.ClientMessageStackLock;
       try
         for i := 0 to aList.Count-1 do
         begin
@@ -1993,15 +1996,14 @@ var packet : PTBusEnvelop;
           lc.Event.SetEvent; //If this reader is waiting somewhere in a thread, it will be trig.
         end;
 
-        begin
-          //TODO : We can here evaluate if there are to many message in waiting for a client...
-          // OR : Implement message time limitation existance within client message list. (Memory improvement)
-          // OR : Minimum client activity timer if many message are stored on its side. (Memory improvement)
-          // OR : Start a notification procedure (To the client, or, to a "memory manager" with "problemetic" client as parameter.
-        end;
+        //TODO : We can here evaluate if there are to many message in waiting for a client...
+        // OR : Implement message time limitation existance within client message list. (Memory improvement)
+        // OR : Minimum client activity timer if many message are stored on its side. (Memory improvement)
+        // OR : Start a notification procedure (To the client, or, to a "memory manager" with "problemetic" client as parameter.
 
       finally
-        lc.ClientMessageStack.Unlock;
+        lc.ClientMessageStackUnlock;
+
       end;
     end;
 
@@ -2444,29 +2446,39 @@ end;
 
 { TBusClient }
 
+function TBusClient.ClientMessageStackLock: TList_PTBusEnvelop;
+begin
+  result := FClientMessageStack.Lock;
+end;
+
+procedure TBusClient.ClientMessageStackUnLock;
+begin
+  FClientMessageStack.Unlock;
+end;
+
 constructor TBusClient.Create(aBus : TBusSystem);
 begin
   Inherited Create;
   Assert(assigned(aBus));
-  ClientMessageStack := TBusEnvelopList.Create;
+  FClientMessageStack := TBusEnvelopList.Create;
   Event := Nil;
   FBus := aBus;
 end;
 
 destructor TBusClient.Destroy;
 begin
-  FreeAndNil(ClientMessageStack);
+  FreeAndNil(FClientMessageStack);
   inherited;
 end;
 
 function TBusClient.GetClientPendingMessageCount: Int64;
 var L : TList_PTBusEnvelop;
 begin
-  L := ClientMessageStack.Lock;
+  L := ClientMessageStackLock;
   try
     Result := L.Count;
   finally
-    ClientMessageStack.Unlock;
+    ClientMessageStackUnlock;
   end;
 end;
 
@@ -2623,6 +2635,20 @@ begin
   Buffer := TEncoding.UTF8.GetBytes(aText);
 end;
 
+procedure TBusMessage.FromStrings(const texts: array of String);
+var i : integer;
+begin
+  if length(texts)>0 then
+  begin
+    With TStringList.Create do
+    begin
+      for i := 0 to length(texts)-1 do
+        add(texts[i]);
+      FromString(text);
+    end;
+  end;
+end;
+
 function TBusMessage.AsString: String;
 begin
 { TODO : Manage encoding }
@@ -2661,6 +2687,24 @@ end;
 { TBus }
 
 procedure TBus.BusShutDown;
+
+  procedure WaitIdle;
+  var l : TDateTime;
+      Sec5 : Single;
+  begin
+   //Limit the idling "tentative reaching" to 3 sec.
+    Sec5 := (1/24/60/60) * 3;
+    l := now;
+    While(not(Idle)) do
+    begin
+      if now-l >Sec5 then
+      begin
+        Sleep(5);
+        Break;
+      end;
+    end;
+  end;
+
 begin
   if FWaitIdlingForShutdown then
     WaitIdle;
@@ -2861,23 +2905,6 @@ end;
 function TBus.UnSubscribe(aClient: TBusClientReader): Boolean;
 begin
   result := sys.UnSubscribe(aClient);
-end;
-
-procedure TBus.WaitIdle;
-var l : TDateTime;
-    Sec5 : Single;
-begin
- //Limit the idling "tentative reaching" to 3 sec.
-  Sec5 := (1/24/60/60) * 3;
-  l := now;
-  While(not(Idle)) do
-  begin
-    if now-l >Sec5 then
-    begin
-      Sleep(5);
-      Break;
-    end;
-  end;
 end;
 
 { TBusChannelData }
