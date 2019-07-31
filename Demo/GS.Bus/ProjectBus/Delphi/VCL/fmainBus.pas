@@ -93,8 +93,7 @@ type
 
 ///
 ///  WARNING : The thread above do not care about Bus var freeing : So, trig them and close app will lead
-///  to an AV. this in not in the scope of this app to correct this.
-///  (It can lead to an AV only IF you changed Bus.WaitIdlingForShutdown default value.)
+///  to an AV. (It can lead to an AV only IF you changed Bus.WaitIdlingForShutdown default value.)
 ///
   TMyThread = Class(TThread)
   private
@@ -484,6 +483,8 @@ var lbp : TBusMessage;
 begin
   for j := 0 to Counter do
   begin
+    if Application.Terminated then //°|°
+      Exit;
     lbp.FromString('['+IntToStr(j)+'] This a test at '+DateToStr(Now));
     Bus.Send(lbp, Channel);
   end;
@@ -513,6 +514,8 @@ begin
   begin
     for i:= 0 to List.Count-1 do
     begin
+      if Application.Terminated then //°|°
+        Exit;
       lbp.FromString('['+IntToStr(i)+'/'+intToStr(j)+'] This a test at '+DateToStr(Now));
       Bus.Send(lbp, list[i]);
     end;
@@ -540,6 +543,8 @@ begin
   begin
     for I := 0 to counter-1 do
     begin
+      if Application.Terminated then //°|°
+        Exit;
       a := TBusClientDataRepo.Create(Bus,RepoName);
       try
         t := 'test value...'+inttostr(i);

@@ -40,7 +40,10 @@
 /// 20190717 - VGS - remove FWaitingMessage list, this liste permited 0 wait on sending message, but
 ///                  introduce memory problem when message producer send an heavy amount of messages.
 ///                  those messages were not processed fast enough. With this new version,
-//                   since it is delivered directly to relevant channel, there are no more  memory problem.
+///                  since it is delivered directly to relevant channel, there are no more  memory problem.
+/// 20190731 - VGS - Change Recv (refacto) : Recv([cl1,cl2],...) always exists and remain untouched, but second one
+///                  Is removed : It was dedicated to SendAndReceive : Code has been move in it.
+
 ///-------------------------------------------------------------------------------
 unit GS.Bus;
 
@@ -73,6 +76,8 @@ Uses
 Const
   CST_BUSTIMER = 250; //MilliSec.
   CST_THREAD_COOLDOWN = 1;
+  CST_ONE_SEC = 1000;
+
   CST_DATAREPO_DELIMITER = ';';
 
 
@@ -530,25 +535,7 @@ Public
   // In :  aClientReadeds : Client previously subscribted to channel.
   // out : Messages : List of envelop.
   Function Recv( const aClientReaders : Array of TBusClientReader;
-                 const Messages : TBusEnvelopList) : UInt32; Overload;
-
-  //This one with only one client : It will test the client only.
-  //if the client have a system event, it will be used, else, as above, it will
-  // be the FWorkOn system event (More intensive)
-  Function Recv( const aClientReader : TBusClientReader;
-                 const Messages : TBusEnvelopList;
-                 const WaitForMessageWithTimeOut : Boolean = true) : UInt32; Overload;
-
-  // Retrieve messages
-  // In :  aClientReadeds : Client previously subscribted to channel.
-  // out : Array with message count in waiting
-  //Note : It use process message internally. So, if aClientReaders have
-  //      receive event associate, the event will *NOT* be fired
-  //      with this methods. For event based, Use ProcesMessage instead.
-{  Procedure MessageStatus( const aClientReaders : Array of TBusClientReader;
-                          const aClientMessagesCount : Array of UInt32;
-                          const aClientMessagesBytes : Array of UInt64);
-}
+                 const Messages : TBusEnvelopList) : UInt32;
 
   /// This use bus capability and ChannelSetOnBeforeDeliverMessageEvent to make an
   /// easy way to exchange information between threads.
@@ -628,14 +615,6 @@ Public
 
   Function Recv( const aClientReaders : Array of TBusClientReader;
                  const Messages : TBusEnvelopList) : UInt32; Overload;
-  Function Recv( const aClientReader : TBusClientReader;
-                 const Messages : TBusEnvelopList;
-                 const WaitForMessageWithTimeOut : Boolean = false) : UInt32; Overload;
-
-{  Procedure MessageStatus( const aClientReaders : Array of TBusClientReader;
-                          const aClientMessagesCount : Array of UInt32;
-                          const aClientMessagesBytes : Array of UInt64);
-}
 
 
   // Send and retrieve message in a synchrone way.
@@ -950,7 +929,7 @@ begin
                                       ' : ['+E.Message+']';
               aReader.Bus.BusLog(t);
               if (aReader.Bus.CallBack_DisabledOnException) then
-                aReader.CallBack := Nil; //Avoid further Exception ?
+                aReader.CallBack := Nil; //Avoid further Exception.
 
               if aReader.Bus.CallBack_ExceptionEnabled then
                 raise Exception.Create(t);
@@ -1525,26 +1504,6 @@ begin
   finally
     FChannels.Unlock;
   end;
-end;
-
-//------------------------------------------------------------------------------
-//W A R N I N G
-// TBusSystem.ProcessMessages([aobj...]) will be called by different thread :
-// It build a "execution list" of the clientreaders (for speed) and execute it
-// for the caller thread context.
-//------------------------------------------------------------------------------
-function TBusSystem.Recv(const aClientReader: TBusClientReader;
-  const Messages: TBusEnvelopList; const WaitForMessageWithTimeOut: Boolean): UInt32;
-var aOb : THandleObject;
-begin
-  Assert(assigned(aClientReader));
-  if WaitForMessageWithTimeOut then
-    if Assigned(aClientReader.Event) then
-      aClientReader.Event.WaitFor(CST_BUSTIMER)
-    else
-      FDoWork.WaitFor(CST_BUSTIMER);
-  BusProcessMessages([aClientReader],Messages);
-  result := Messages.Items.Count;
 end;
 
 function TBusSystem.Recv(const aClientReaders: array of TBusClientReader;
@@ -2814,11 +2773,6 @@ begin
   result := Sys.IsDataRepositoryExists(aRepoName);
 end;
 
-function TBus.Recv(const aClientReader: TBusClientReader;
-  const Messages: TBusEnvelopList; const WaitForMessageWithTimeOut: Boolean): UInt32;
-begin
-  result := Sys.Recv(aClientReader,Messages,WaitForMessageWithTimeOut);
-end;
 
 function TBus.Recv(const aClientReaders: array of TBusClientReader;
   const Messages: TBusEnvelopList): UInt32;
@@ -2847,52 +2801,33 @@ function TBus.SendAndRecv( const aClient : TBusClientReader;
                         aMessage : TBusEnvelop;
                         var aResponse : TBusEnvelop): UInt32;
 
-var lmb : TBusEnvelopList;
-    n : TDateTime;
+var ll : TList_PTBusEnvelop;
 begin
   Assert(aMessage.TargetChannel<>'');
   result := 0;
-  /// WARNING : Dev Note : Why note the 2 lines above is NOT good ?
-  /// aClient.Event.WaitFor(INFINITE);
-  /// ProcessMessages([aClient],lmb);
-  ///
-  /// - It lock definetly a thread if bus does not respond. It is not the bus responsability to permit at the other thread to go on.
-  /// Please implement on client side the possibility to retry on they level if result is false.
-  /// - With this solution, aClient does not need an system event : Economy.
-  lmb := TBusEnvelopList.Create;
-  try
-    n := now;
-    Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,aClient.ChannelListening);
-    while not(Terminated) And not(TVisibilityThread(CurrentThread).Terminated) do
-    begin
-      Recv(aclient,lmb,true);
-      if lmb.Items.Count>0 then
+
+  Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,aClient.ChannelListening);
+
+  while not(Terminated) And not(TVisibilityThread(CurrentThread).Terminated) do
+  begin
+    //Do not use BusProcessMessages here : In certain condition, messages can
+    //be conssumed before Client Messagestack query.
+    //BusProcessMessages([aClient],lmb);
+    ll := aClient.ClientMessageStackLock;
+    try
+      result := ll.Count;
+      if result >0 then
       begin
-        Result := lmb.Items.Count;
-        aResponse := lmb.Items[0]^;
-        Break;
+        aResponse := ll[0]^;
       end
-      else
+    finally
+      aClient.ClientMessageStackUnLock;
     end;
 
-
-{    while not(Terminated)
-          And(not( now-n > (1/(3600*24))*5) )
-          And not(TVisibilityThread(CurrentThread).Terminated)
-          And (Recv(aclient,lmb,true) = 0) do;
-
-    if lmb.Items.Count>0 then
-    begin
-      Result := lmb.Items.Count;
-      aResponse := lmb.Items[0]^;
-    end
+    if result>0 then
+      break
     else
-    begin
-      raise Exception.Create('SendAndRecv Error Message');
-    end;
-}
-  finally
-    FreeAndNil(lmb);
+      sleep(CST_THREAD_COOLDOWN);
   end;
 end;
 

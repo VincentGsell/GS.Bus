@@ -378,6 +378,10 @@ object Form2: TForm2
     object tsDataRepo: TTabSheet
       Caption = 'In Memory DataRepo'
       ImageIndex = 1
+      ExplicitLeft = 0
+      ExplicitTop = 0
+      ExplicitWidth = 0
+      ExplicitHeight = 0
       DesignSize = (
         1071
         639)
