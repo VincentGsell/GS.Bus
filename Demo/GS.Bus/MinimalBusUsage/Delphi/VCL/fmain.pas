@@ -68,7 +68,10 @@ end;
 
 procedure TFormMain.Timer1Timer(Sender: TObject);
 begin
-  BusProcessMessages([MyClient]); //ask to get message in the main thread context. Avoid synchro call.
+  //ask to get message in the main thread context :
+  //-  Avoid synchro call.
+  //- do not overload your main gui thread, or, at least, kept control on it.
+  BusProcessMessages([MyClient]);
 end;
 
 
@@ -98,6 +101,8 @@ begin
       aM.FromString('thread #'+IntToStr(ThreadId)+' message '+IntToStr(cc));
       Bus.Send(aM,'test Channel');
       Sleep(500);
+      if Terminated then
+        exit;
     end
     else
     begin

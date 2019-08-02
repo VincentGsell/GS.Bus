@@ -15,6 +15,9 @@
         <Projects Include="GS.MVVM\Basic\ProjectMVVM.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="GS.Bus\MinimalBusUsage\Delphi\VCL\ProjectMinimalBus.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -59,14 +62,23 @@
     <Target Name="ProjectMVVM:Make">
         <MSBuild Projects="GS.MVVM\Basic\ProjectMVVM.dproj" Targets="Make"/>
     </Target>
+    <Target Name="ProjectMinimalBus">
+        <MSBuild Projects="GS.Bus\MinimalBusUsage\Delphi\VCL\ProjectMinimalBus.dproj"/>
+    </Target>
+    <Target Name="ProjectMinimalBus:Clean">
+        <MSBuild Projects="GS.Bus\MinimalBusUsage\Delphi\VCL\ProjectMinimalBus.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ProjectMinimalBus:Make">
+        <MSBuild Projects="GS.Bus\MinimalBusUsage\Delphi\VCL\ProjectMinimalBus.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="ProjectBus;ProjectRayracerTest;ProjectLocalMemCached;ProjectMVVM"/>
+        <CallTarget Targets="ProjectBus;ProjectRayracerTest;ProjectLocalMemCached;ProjectMVVM;ProjectMinimalBus"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="ProjectBus:Clean;ProjectRayracerTest:Clean;ProjectLocalMemCached:Clean;ProjectMVVM:Clean"/>
+        <CallTarget Targets="ProjectBus:Clean;ProjectRayracerTest:Clean;ProjectLocalMemCached:Clean;ProjectMVVM:Clean;ProjectMinimalBus:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="ProjectBus:Make;ProjectRayracerTest:Make;ProjectLocalMemCached:Make;ProjectMVVM:Make"/>
+        <CallTarget Targets="ProjectBus:Make;ProjectRayracerTest:Make;ProjectLocalMemCached:Make;ProjectMVVM:Make;ProjectMinimalBus:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

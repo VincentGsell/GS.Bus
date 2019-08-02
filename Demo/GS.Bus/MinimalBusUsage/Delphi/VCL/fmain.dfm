@@ -33,8 +33,6 @@ object FormMain: TFormMain
     Width = 424
     Height = 423
     Anchors = [akLeft, akTop, akRight, akBottom]
-    Lines.Strings = (
-      'Memo1')
     TabOrder = 1
   end
   object Button2: TButton
