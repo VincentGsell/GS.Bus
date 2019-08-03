@@ -2807,7 +2807,6 @@ begin
   result := 0;
 
   Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,aClient.ChannelListening);
-
   while not(Terminated) And not(TVisibilityThread(CurrentThread).Terminated) do
   begin
     //Do not use BusProcessMessages here : In certain condition, messages can
