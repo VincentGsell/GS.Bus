@@ -812,7 +812,6 @@ end;
 
 function StreamToStampedStringItems(aStream : TStream) : TBCDRStampedStringItems;
 var i, h : UInt64;
-    m : TBCDRStampedStringItem;
 begin
   Assert(assigned(aStream));
   Result := nil;
@@ -1119,15 +1118,13 @@ end;
 
 procedure TBusSystem.BusExecute;
 var
-    aMes : PTBusEnvelop;
     lMasterMessageList,
     lTempML : TList_PTBusEnvelop;
     lchans : TObjectDictionary_StringObject;
     channel : TBusChannel;
 
     Procedure LocalInternalChannelDispatch;
-    var i,j : Integer;
-        t : String;
+    var i : Integer;
     begin
       //STEP ONE : All message in processing list are now dispached to the channels.
       lMasterMessageList := FWaitMessageList.Lock;
@@ -1166,11 +1163,7 @@ var
     end;
 
     procedure LocalInternalChannelProcess;
-    var i,j : integer;
-        l : TStackTaskChannel;
-        ll : TList_TStackTask;
-        f : boolean;
-
+    var
         chanIndex : Integer;
         chanCount : Integer;
     begin
@@ -1508,8 +1501,6 @@ end;
 
 function TBusSystem.Recv(const aClientReaders: array of TBusClientReader;
   const Messages: TBusEnvelopList): UInt32;
-var i : integer;
-    ldetect : boolean;
 begin
   BusProcessMessages(aClientReaders,Messages);
   result := Messages.Items.Count;
@@ -1524,10 +1515,6 @@ Function TBusSystem.Send(  var aMessage : TBusMessage;
                  const AppFilter : String = '') : Int64;
 var aPacket : PTBusEnvelop;
     L : TList_PTBusEnvelop;
-    lTempChannel : String;
-    ltempstr : TStringList;
-    i : integer;
-    FWchr : char;
 
     Procedure InternalSendMessage(aChannel : String);
     begin
@@ -1899,7 +1886,6 @@ var packet : PTBusEnvelop;
     end;
 
     procedure DeliverSingleMessage(aMessage : PTBusEnvelop);
-    var i : integer;
     begin
       ll := lc.ClientMessageStackLock;
       try
@@ -2005,7 +1991,6 @@ var packet : PTBusEnvelop;
     end;
 
 var lbPersistantChannel : Boolean;
-    lmem : UInt32;
     lp : TList_PTBusEnvelop;
     idx : integer;
     lcl : Integer;
@@ -2302,9 +2287,7 @@ procedure TBusChannelList.CreateOrSetChannel(aChannelName : String;
                                 aChannelBehaviourType : TBusChannelBehaviour;
                                 const aMessageWillBePersistent : Boolean = False;
                                 const EchoEnabled : Boolean = True);
-var cl : TObjectDictionary_BusChannel;
-    i : integer;
-    c : TBusChannel;
+var c : TBusChannel;
 Begin
   Assert(Assigned(Flist));
   if Not(FList.TryGetValue(aChannelName,TObject(c))) then
@@ -2353,7 +2336,6 @@ end;
 
 function TBusChannelList.IsChannelExists(const aChannelName: String): Boolean;
 var
-  I: Integer;
   ldummy : TObject;
 begin
   Assert(Assigned(Flist));
@@ -2368,9 +2350,7 @@ end;
 
 procedure TBusChannelList.SetChannelOnBeforeDeliverEvent(
   aChannelName: String; aChannelProc: TOnBusChannelBeforeDeliverMessage);
-var cl : TObjectDictionary_BusChannel;
-    i : integer;
-    c : TBusChannel;
+var c : TBusChannel;
 Begin
   Assert(Assigned(Flist));
   if Not(FList.TryGetValue(aChannelName,TObject(c))) then
@@ -2562,7 +2542,6 @@ end;
 
 
 function TBusMessage.AsDouble: Double;
-var i : integer;
 begin
   result := 0.0;
   if length(Buffer) = SizeOf(Double) then
@@ -2572,8 +2551,7 @@ begin
 end;
 
 procedure TBusMessage.FromDouble(aD: Double);
-var i : integer;
-    t : Double;
+var t : Double;
 begin
   SetLength(Buffer,SizeOf(Double));
   Move(aD,Buffer[0],SizeOf(Double));
@@ -2591,7 +2569,7 @@ end;
 procedure TBusMessage.FromString(const aText: String);
 begin
 { TODO : Manage encoding }
-  Buffer := TEncoding.UTF8.GetBytes(aText);
+  Buffer := TEncoding.UTF8.GetBytes(UnicodeString(aText));
 end;
 
 procedure TBusMessage.FromStrings(const texts: array of String);
@@ -3018,7 +2996,7 @@ begin
 end;
 
 procedure TBusClientDataRepo.SetValue(const aKey: String; const aValue: Double);
-var m1,m2 : TBusEnvelop;
+var m1 : TBusEnvelop;
 begin
   m1.TargetChannel := FInternalChannelToDataRepo;
   m1.AdditionalData := 'SET;'+KeyStrNormalize(aKey)+GetRepoStr;
