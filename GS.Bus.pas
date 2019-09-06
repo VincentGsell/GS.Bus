@@ -140,6 +140,7 @@ Private
 Public
   constructor Create; Virtual;
   procedure Add(aPTBusEnvelop : PTBusEnvelop);
+  procedure Remove(Index : Uint32);
   procedure Clear;
   property Items[Index : Uint32] : PTBusEnvelop read GetPTBusEnvelop Write SetPTBusEnvelop; default;
   property Count : Uint32 read GetPTBusEnvelopCount;
@@ -2795,8 +2796,9 @@ begin
       result := ll.Count;
       if result >0 then
       begin
-        aResponse := ll[0]^;
-      end
+        aResponse := ll[0]^; //Copy.
+        ll.Remove(0);
+      end;
     finally
       aClient.ClientMessageStackUnLock;
     end;
@@ -3062,6 +3064,32 @@ end;
 function TList_PTBusEnvelop.GetPTBusEnvelopCount: Uint32;
 begin
   result := FIndex;
+end;
+
+procedure TList_PTBusEnvelop.Remove(Index: Uint32);
+var i : integer;
+begin
+  if Count=0 then
+    Exit;
+
+  if Count=1 then
+  begin
+    Clear;
+    Exit;
+  end;
+
+  if Index<count-1 then //general case.
+  begin
+    for I := Index to count-2 do
+      Farray[I] := FArray[I+1];
+    FArray[count-1] := Nil;
+  end
+  else
+  if index=count-1 then //Last one.
+  begin
+    FArray[count-1] := Nil;
+  end;
+  Dec(FIndex);
 end;
 
 procedure TList_PTBusEnvelop.SetPTBusEnvelop(Index: Uint32;
