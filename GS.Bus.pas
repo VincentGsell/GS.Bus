@@ -776,7 +776,7 @@ Function AtomicIncrement64(var a : Int64) : Int64;
 begin
   {$IFDEF FPC}
     {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
-  FBusGL.Lock; try result := a+1; finally FBusGL.Unlock; end; ///!!!
+  FBusGL.Acquire; try result := a+1; finally FBusGL.Release; end; ///!!!
     {$ELSE}
   result := InterLockedIncrement64(a);
     {$ENDIF}
@@ -789,7 +789,7 @@ Function AtomicIncrement64(var a : Int64; const Value : Int64) : Int64; Overload
 begin
   {$IFDEF FPC}
     {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
-  FBusGL.Lock; try result := a+Value; finally FBusGL.Unlock; end; ///!!!
+  FBusGL.Acquire; try result := a+Value; finally FBusGL.Release; end; ///!!!
     {$ELSE}
   result := InterLockedExchangeAdd64(a,Value);
     {$ENDIF}
@@ -802,7 +802,7 @@ Function AtomicDecrement64(var a : Int64) : Int64;
 begin
   {$IFDEF FPC}
   {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
-  FBusGL.Lock; try result := a-1; finally FBusGL.Unlock; end; ///!!!
+  FBusGL.Acquire; try result := a-1; finally FBusGL.Release; end; ///!!!
     {$ELSE}
   result := InterLockedDecrement64(a);
     {$ENDIF}
