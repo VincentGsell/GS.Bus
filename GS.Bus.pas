@@ -710,7 +710,7 @@ public
   /// As a result, you get a list of TBCDRStamped<TYPE>Item.
   Procedure SetValueStamped(const aKey : String; Const aValue : String); Overload; Virtual;
   function GetValueStamped(const aKey : String; var aResult : TBCDRStampedStringItems) : Boolean; Overload; Virtual;
-
+  // clear a KV Value.
   procedure ClearValue(const aKey : string);
 
   Property RepositoryName : String read FRepo;
@@ -757,7 +757,7 @@ var i : integer;
 {$IFDEF FPC}
     StringsToRemove : array of string;
 {$ELSE}
-const StringsToRemove : array of string = [CST_DATAREPO_DELIMITER,' '];
+  const StringsToRemove : array of string = [CST_DATAREPO_DELIMITER,' '];
 {$ENDIF}
 begin
   {$IFDEF FPC}
@@ -2850,16 +2850,6 @@ end;
 
 { TBusClientDataRepo }
 
-procedure TBusClientDataRepo.ClearValue(const aKey: string);
-var m1 : TBusEnvelop;
-begin
-  m1.TargetChannel := FInternalChannelToDataRepo;
-  m1.AdditionalData := 'CLEAR;'+aKey;
-  m1.ContentMessage.Buffer := nil;
-  FBus.Send(m1.ContentMessage,m1.TargetChannel,m1.AdditionalData);
-end;
-
-
 constructor TBusClientDataRepo.Create(const aBus: TBus;
   const aRepoName: String);
 begin
@@ -2900,23 +2890,6 @@ begin
   if result then
   begin
     aValue := m2.ContentMessage.AsDouble;
-  end;
-end;
-
-function TBusClientDataRepo.GetValueStamped(const aKey: String;
-  var aResult: TBCDRStampedStringItems): Boolean;
-var l : TMemoryStream;
-begin
-  result := false;
-  l := TMemoryStream.Create;
-  try
-    if GetValue(aKey,l) then
-    begin
-      aresult := StreamToStampedStringItems(l);
-      result := true;
-    end;
-  finally
-    FreeAndnil(l);
   end;
 end;
 
@@ -3020,6 +2993,35 @@ begin
     FreeAndNil(l);
   end;
 end;
+
+
+function TBusClientDataRepo.GetValueStamped(const aKey: String;
+  var aResult: TBCDRStampedStringItems): Boolean;
+var l : TMemoryStream;
+begin
+  result := false;
+  l := TMemoryStream.Create;
+  try
+    if GetValue(aKey,l) then
+    begin
+      aresult := StreamToStampedStringItems(l);
+      result := true;
+    end;
+  finally
+    FreeAndnil(l);
+  end;
+end;
+
+
+procedure TBusClientDataRepo.ClearValue(const aKey: string);
+var m1 : TBusEnvelop;
+begin
+  m1.TargetChannel := FInternalChannelToDataRepo;
+  m1.AdditionalData := 'CLEAR;'+KeyStrNormalize(aKey)+GetRepoStr;
+  m1.ContentMessage.Buffer := nil;
+  FBus.Send(m1.ContentMessage,m1.TargetChannel,m1.AdditionalData);
+end;
+
 
 { TList_PTBusEnvelop }
 {$IFNDEF USE_GENERIC}
