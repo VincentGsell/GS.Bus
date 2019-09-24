@@ -96,15 +96,16 @@ TBusMessage = Packed Record
 
   procedure FromDouble(aD : Double);
   function AsDouble : Double;
-  Procedure FromString(const aText : String);
-  Procedure FromStrings(const texts : Array of String);
-  Function AsString : String;
-  Procedure FromStream(aStream : TStream);
-  Procedure ToStream(var aTargetStream : TStream); //No need transfert's stream.
-  Function AsStream : TMemoryStream; //(!) Got new object.
-  Procedure FromByte(aByte : Byte);
-  Function AsByte : Byte;
-  Function Size : Uint64;
+  procedure FromString(const aText : String);
+  procedure FromStrings(const texts : Array of String);
+  function AsString : String;
+  function asStringList : TStringList;
+  procedure FromStream(aStream : TStream);
+  procedure ToStream(var aTargetStream : TStream); //No need transfert's stream.
+  function AsStream : TMemoryStream; //(!) Got new object.
+  procedure FromByte(aByte : Byte);
+  function AsByte : Byte;
+  function Size : Uint64;
 End;
 pTBusMessage = ^TBusMessage;
 
@@ -121,6 +122,9 @@ TBusEnvelop = packed Record
   CreateTag : Uint64;
 End;
 
+///
+///  Use this TBusMessageNotify for reception of message event.
+///
 TBusMessageNotify = Procedure(Sender : TBusSystem; aReader : TBusClientReader; Var Packet : TBusEnvelop) Of Object;
 
 PTBusEnvelop = ^TBusEnvelop;
@@ -776,7 +780,7 @@ Function AtomicIncrement64(var a : Int64) : Int64;
 begin
   {$IFDEF FPC}
     {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
-  FBusGL.Acquire; try result := a+1; finally FBusGL.Release; end; ///!!!
+  FBusGL.Acquire; try inc(a); result := a; finally FBusGL.Release; end; ///!!!
     {$ELSE}
   result := InterLockedIncrement64(a);
     {$ENDIF}
@@ -789,7 +793,7 @@ Function AtomicIncrement64(var a : Int64; const Value : Int64) : Int64; Overload
 begin
   {$IFDEF FPC}
     {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
-  FBusGL.Acquire; try result := a+Value; finally FBusGL.Release; end; ///!!!
+  FBusGL.Acquire; try inc(a,value); result := a; finally FBusGL.Release; end; ///!!!
     {$ELSE}
   result := InterLockedExchangeAdd64(a,Value);
     {$ENDIF}
@@ -802,7 +806,7 @@ Function AtomicDecrement64(var a : Int64) : Int64;
 begin
   {$IFDEF FPC}
   {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
-  FBusGL.Acquire; try result := a-1; finally FBusGL.Release; end; ///!!!
+  FBusGL.Acquire; try dec(a); result := a; finally FBusGL.Release; end; ///!!!
     {$ELSE}
   result := InterLockedDecrement64(a);
     {$ENDIF}
@@ -2591,6 +2595,12 @@ function TBusMessage.AsString: String;
 begin
 { TODO : Manage encoding }
   Result := String(TEncoding.UTF8.GetString(Buffer));
+end;
+
+function TBusMessage.asStringList: TStringList;
+begin
+  result := TStringList.Create;
+  result.Text := AsString;
 end;
 
 function TBusMessage.Size: Uint64;

@@ -108,9 +108,11 @@ TThreadServiceMessage_HeartBeat = Packed Record
   Procedure LoadFromStream(aStream : TMemoryStream);
 end;
 
+TThreadServiceMessage_LogVerbosityLevel = (all, info, warning, exception);
 TThreadServiceMessage_Log = Packed Record
   ServiceContext : UInt64;
   ThreadID : UInt64;
+  VerbosityLevel : TThreadServiceMessage_LogVerbosityLevel;
   LogText : string;
 
   Function GetAsStream : TMemoryStream; //...
@@ -195,7 +197,7 @@ Public
   Procedure DoHeartBeat; Virtual;
   Procedure DoProgress(aPercent : Double); Virtual;
   Procedure DoResult(aStream : TMemoryStream; Const IsAFinalResult : Boolean = False); Virtual;
-  Procedure DoLog(aLogText : String); Virtual;
+  Procedure DoLog(aLogText : String; const Verbosity : TThreadServiceMessage_LogVerbosityLevel = TThreadServiceMessage_LogVerbosityLevel.info); Virtual;
 
   Property Bus : TBus read FBus;
   Property Terminated; //Prop. Visibility.
@@ -405,7 +407,7 @@ begin
   End;
 end;
 
-procedure TCustomServiceThread.DoLog(aLogText: String);
+procedure TCustomServiceThread.DoLog(aLogText: String; const Verbosity : TThreadServiceMessage_LogVerbosityLevel = TThreadServiceMessage_LogVerbosityLevel.info);
 var lMes : TBusMessage;
     lMem : TMemoryStream;
     lFormatedMessage : TThreadServiceMessage_Log;
@@ -415,6 +417,7 @@ begin
     lFormatedMessage.ServiceContext := UInt64(FService);
     lFormatedMessage.ThreadID := ThreadID;
     lFormatedMessage.LogText := aLogText;
+    lFormatedMessage.VerbosityLevel := Verbosity;
     lMem := lFormatedMessage.GetAsStream;
     try
       lMes.FromStream(lMem);
@@ -1102,6 +1105,7 @@ begin
   Result :=  TMemoryStream.Create;
   WriteUInt64(Result, ServiceContext);
   WriteUInt64(Result, ThreadID);
+  WriteByte(result,Byte(VerbosityLevel));
   WriteString(Result, LogText);
 end;
 
@@ -1110,6 +1114,7 @@ begin
   Assert(assigned(aStream));
   ServiceContext := ReadUInt64(aStream);
   ThreadID := ReadUInt64(aStream);
+  VerbosityLevel := TThreadServiceMessage_LogVerbosityLevel(readByte(aStream));
   LogText := ReadString(aStream)
 end;
 
