@@ -28,7 +28,7 @@ Type
 
   Public
     Procedure Execute; Override;
-    Constructor Create(aVarValue : Double); Reintroduce;
+    Constructor Create(aVarValue : Double; const camDistance : Double = 5.0); Reintroduce;
     Destructor Destroy; Override;
 
     Property Id : Integer read FID Write FID;
@@ -49,11 +49,11 @@ implementation
 
 
 
-constructor TRaytracerStackTask.Create(aVarValue : Double);
+constructor TRaytracerStackTask.Create(aVarValue : Double; const camDistance : Double);
 begin
   inherited Create;
   Engine := RayTracerEngine.Create;
-  Model := Scene.Create(aVarValue);
+  Model := Scene.Create(aVarValue, camDistance);
   Bitmap := TRawBitmap.Create;
 end;
 

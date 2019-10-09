@@ -129,7 +129,7 @@ public
   things:TObjectList<Thing>;
   lights:TObjectList<Light>;
   xcamera:Camera;
-  constructor Create(varPart : Double); Reintroduce;
+  constructor Create(varPart : Double; const camDistance : double = 5.0); Reintroduce;
   destructor Destroy; Override;
 end;
 
@@ -716,7 +716,7 @@ end;
 
 { Scene }
 
-constructor Scene.Create(varPart : Double);
+constructor Scene.Create(varPart : Double; const camDistance : double );
 begin
   shiny:=ShinySurface.Create;
   checkerboard:=CheckerboardSurface.Create;
@@ -728,7 +728,7 @@ begin
 //  things.Add( Sphere.Create(Vector.Create(0.0, 1.0, 0.5), 1.0, Shiny ));
   things.Add( Sphere.Create(Vector.Create(0.0, 1.0, VarPart), 1.0, Shiny ));
   things.Add( Sphere.Create(Vector.Create(-1.0, 0.5, 1.5), 0.5, shiny));
-//  things.Add( Sphere.Create(Vector.Create(-2.0, 0.2, 0), 1.2, checkerboard));
+  things.Add( Sphere.Create(Vector.Create(-3.0, 8, -30), 16.2, shiny));
 
   lights.Add(Light.Create(Vector.Create(200, 10, 0.0), Color.Create(0.5, 0.5, 0.5)));
 
@@ -737,7 +737,7 @@ begin
   lights.Add(Light.Create(Vector.Create(1.5, 2.5, -1.5), Color.Create(0.07, 0.49, 0.071)));
   lights.Add(Light.Create(Vector.Create(0.0, 3.5, 0.0),  Color.Create(0.21, 0.21, 0.35)));
 
-  self.xcamera := Camera.Create(Vector.Create(3.0, 2.0, 5.0), Vector.Create(-1.0, 0.5, 0.0));
+  self.xcamera := Camera.Create(Vector.Create(3.0, 2.0, CamDistance), Vector.Create(-1.0, 0.5, 0.0));
 
 end;
 

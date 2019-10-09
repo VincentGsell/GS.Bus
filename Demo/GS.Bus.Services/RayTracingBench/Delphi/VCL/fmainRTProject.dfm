@@ -27,6 +27,7 @@ object Form1: TForm1
     Center = True
     Proportional = True
     Stretch = True
+    OnMouseMove = Image1MouseMove
   end
   object Button1: TButton
     Left = 8
@@ -82,5 +83,17 @@ object Form1: TForm1
     Caption = 'GS.thread'
     TabOrder = 5
     OnClick = Button6Click
+  end
+  object TrackBar1: TTrackBar
+    Left = 80
+    Top = 388
+    Width = 45
+    Height = 253
+    Max = 400
+    Min = 1
+    Orientation = trVertical
+    Position = 5
+    TabOrder = 6
+    OnChange = TrackBar1Change
   end
 end

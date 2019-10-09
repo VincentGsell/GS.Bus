@@ -9,12 +9,12 @@ uses
   raytrace,
   System.Threading,
   GS.Bus.Services,
-  GS.Threads.Pool;
+  GS.Threads.Pool, Vcl.ComCtrls;
 
 
 
 Const
-  BMPSIZE = 500; //1200; //400; //2400;
+  BMPSIZE = 512; //1200; //400; //2400;
   GTHREADCOUNT = 8;  //Thread count and BMPSIZE should be multiple of 2 :  For rebuliding final image without mantissa issue.
 
 type
@@ -26,6 +26,7 @@ type
     Button4: TButton;
     Button5: TButton;
     Button6: TButton;
+    TrackBar1: TTrackBar;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -33,6 +34,9 @@ type
     procedure Button5Click(Sender: TObject);
     procedure Button6Click(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure Image1MouseMove(Sender: TObject; Shift: TShiftState; X,
+      Y: Integer);
+    procedure TrackBar1Change(Sender: TObject);
   private
     { Private declarations }
   public
@@ -194,15 +198,29 @@ begin
 end;
 
 
+procedure TForm1.Image1MouseMove(Sender: TObject; Shift: TShiftState; X,
+  Y: Integer);
+begin
+  if ssleft in shift then
+  begin
+
+  end;
+end;
+
 procedure TForm1.OnTaskFinished(const aThreadIndex: UInt32;
   aStackTask: TStackTask; TaskProcessTimeValue: UInt64);
 var l : TRaytracerStackTask;
 begin
   l := TRaytracerStackTask(aStackTask);
-  Memo1.lines.add(IntTosTr(aThreadIndex)+' '+IntToStr(l.ID)+' '+l.ClassName+' '+IntToStr(TaskProcessTimeValue div 1000000)+'ms');
+  Memo1.lines.add(IntTosTr(aThreadIndex)+' '+IntToStr(l.ID)+' '+l.ClassName+' '+IntToStr(TaskProcessTimeValue div 100000)+'ms');
 
   ConvertRawToBitmapAndDrawIt( l.ID,
                                l.Bitmap);
+end;
+
+procedure TForm1.TrackBar1Change(Sender: TObject);
+begin
+  Button6Click(sender);
 end;
 
 { TRaytracerThread }
@@ -244,7 +262,6 @@ begin
     lt[i].WaitFor;
   end;
   gsw.Stop;
-
 
   for i := 0  to GTHREADCOUNT-1 do
   begin
@@ -338,14 +355,13 @@ begin
   SetLength(ltak,GTHREADCOUNT);
   for I := 0 to GTHREADCOUNT-1 do
   begin
-    ltak[i] := TRaytracerStackTask.Create(lv);
+    ltak[i] := TRaytracerStackTask.Create(lv,TrackBar1.position);
     ltak[i].Id := i+1;
     ltak[i].X1 := (i) * (BMPSIZE div GTHREADCOUNT);
     ltak[i].X2 := (i+1) * (BMPSIZE div GTHREADCOUNT);
     ltak[i].Bitmap.SetSize(BMPSIZE div GTHREADCOUNT,BMPSIZE);
     ltak[i].BmpSideSize := BMPSIZE;
   end;
-
 
 
   gsw.Reset;
@@ -360,7 +376,6 @@ begin
     application.ProcessMessages; //By default, Threapool is configured as "synchrone". Wait sequence need the call of app.processmessages.
   end;
   gsw.Stop;
-
   Memo1.Lines.Add('[GS.Threads.Pool] Completed in: ' + IntToStr(gsw.ElapsedMilliseconds) + ' ms');
   Button6.Enabled := true;
 end;
