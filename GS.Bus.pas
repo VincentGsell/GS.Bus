@@ -77,6 +77,7 @@ Const
   CST_BUSTIMER = 250; //MilliSec.
   CST_THREAD_COOLDOWN = 1;
   CST_ONE_SEC = 1000;
+  CST_100_MSEC = 100;
 
   CST_DATAREPO_DELIMITER = ';';
 
@@ -123,7 +124,15 @@ TBusEnvelop = packed Record
 End;
 
 ///
+///
+///
+///
+///
 ///  Use this TBusMessageNotify for reception of message event.
+///
+///
+///
+///
 ///
 TBusMessageNotify = Procedure(Sender : TBusSystem; aReader : TBusClientReader; Var Packet : TBusEnvelop) Of Object;
 
@@ -629,7 +638,7 @@ Public
   // Out : aResponse : The response message. If there are more than one message,
   // first only will be presented.
   // Note : This method use above's Send and Recv (With WaitForMessage = true) methods.
-  Function SendAndRecv( const aClient : TBusClientReader;
+  Function SendAndRecv( const client : TBusClientReader;
                         aMessage : TBusEnvelop;
                         var aResponse : TBusEnvelop) : UInt32;
 
@@ -725,7 +734,7 @@ private
   fchan : TBusChannel;
 public
   constructor create(aChannel : TBusChannel); reintroduce;
-  procedure execute; Override;
+  procedure execute(Worker : TThread); Override;
 End;
 
 
@@ -740,11 +749,11 @@ Function AtomicDecrement64(var a : Int64) : Int64;
 
 
   //Key methods : Call that in your coin of world (in another thread or not) to check your message box ;)
-  //If aMailBoy is present, message will not be summonint in a ClientReaders callbacks, but pass to the aMailBox (as a copy).
-  //if NonBlocks is true (Default : False), ProcessMesages will not wait Bus thread : It exit fastly.
-  //Usage : Use True of you call ProcessMessages in a loop, periodically.
-  Procedure BusProcessMessages( Const aClientReaders : Array of TBusClientReader;
-                                      Const aMailBox : TBusEnvelopList = Nil);
+  //If aMailBox is present, message will not be summoning in a ClientReaders callbacks, but pass to the aMailBox (as a copy).
+  // --> zhis method is generaly safer, because if callback generate an execption, it will desactivated the client.
+  //OUT : It return the number of message processed.
+  function BusProcessMessages( Const aClientReaders : Array of TBusClientReader;
+                                      Const aMailBox : TBusEnvelopList = Nil) : UInt32;
 
 function StreamToStampedStringItems(aStream : TStream) : TBCDRStampedStringItems;
 function StampedStringItemsToString(const aStamptedString : TBCDRStampedStringItems; const WithStamp : Boolean = false) : String;
@@ -870,8 +879,8 @@ begin
   end;
 end;
 
-Procedure BusProcessMessages( Const aClientReaders : Array of TBusClientReader;
-                              Const aMailBox : TBusEnvelopList = Nil);
+function BusProcessMessages( Const aClientReaders : Array of TBusClientReader;
+                              Const aMailBox : TBusEnvelopList = Nil) : UInt32;
 var
     mcl : TList_PTBusEnvelop;
     mcl2 : TList_PTBusEnvelop;
@@ -883,7 +892,7 @@ begin
   //VGS : Above assert : Removed once more... Let this comment to ***not turn it back !!!***.
   //      Bus.processMessages is attended to be called by everywhere, in all thread we want.
   //  Assert(aClientReader.CreatorThreadId = GetThreadID);
-
+  result := 0;
   if length(aClientReaders)=0 then
     Exit;
 
@@ -909,6 +918,7 @@ begin
         aReader.ClientMessageStackUnlock;
       end;
 
+      result := mcl2.Count;
 
       if mcl2.Count>0 then
       begin
@@ -2786,22 +2796,23 @@ begin
                       AppFilter);
 end;
 
-function TBus.SendAndRecv( const aClient : TBusClientReader;
+function TBus.SendAndRecv( const client : TBusClientReader;
                         aMessage : TBusEnvelop;
                         var aResponse : TBusEnvelop): UInt32;
 
 var ll : TList_PTBusEnvelop;
 begin
+  Assert(Assigned(client));
   Assert(aMessage.TargetChannel<>'');
   result := 0;
 
-  Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,aClient.ChannelListening);
+  Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,client.ChannelListening);
   while not(Terminated) And not(TVisibilityThread(TBus.CurrentThread).Terminated) do
   begin
     //Do not use BusProcessMessages here : In certain condition, messages can
     //be conssumed before Client Messagestack query.
     //BusProcessMessages([aClient],lmb);
-    ll := aClient.ClientMessageStackLock;
+    ll := client.ClientMessageStackLock;
     try
       result := ll.Count;
       if result >0 then
@@ -2810,7 +2821,7 @@ begin
         ll.Remove(0);
       end;
     finally
-      aClient.ClientMessageStackUnLock;
+      client.ClientMessageStackUnLock;
     end;
 
     if result>0 then
@@ -3180,7 +3191,7 @@ begin
   fchan := aChannel;
 end;
 
-procedure TStackTaskChannel.execute;
+procedure TStackTaskChannel.execute(Worker : TThread);
 begin
   fchan.DoProcessing;
 end;

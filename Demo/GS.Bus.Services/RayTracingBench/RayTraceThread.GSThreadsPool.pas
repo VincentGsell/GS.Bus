@@ -27,7 +27,7 @@ Type
     FBMPSideSize: Integer;
 
   Public
-    Procedure Execute; Override;
+    Procedure Execute(Worker : TThread); Override;
     Constructor Create(aVarValue : Double; const camDistance : Double = 5.0); Reintroduce;
     Destructor Destroy; Override;
 

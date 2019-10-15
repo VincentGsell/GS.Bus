@@ -113,6 +113,15 @@ ShinySurface = class(Surface)
     function roughness: Double ; override;
 end;
 
+testSurface = class(Surface)
+  public
+    function diffuse(const pos: Vector): Color; override;
+    function specular(const pos: Vector): Color; override;
+    function reflect(const pos: Vector): Double ; override;
+    function roughness: Double ; override;
+end;
+
+
 CheckerboardSurface = class(Surface)
   public
     function diffuse(const pos: Vector): Color; override;
@@ -124,6 +133,7 @@ end;
 Scene = class(TObject)
 public
   shiny:ShinySurface;
+  test:TestSurface;
   checkerboard:CheckerboardSurface;
 
   things:TObjectList<Thing>;
@@ -193,6 +203,7 @@ Var
   Colorwhite : Color;
   Colorgrey  : Color;
   Colorblack : Color;
+  ColorRed   : Color;
 
   ColordefaultColor : Color;
   Colorbackground   : Color;
@@ -436,6 +447,30 @@ function ShinySurface.specular(const pos: Vector): Color;
 begin
   Result := Colorgrey;
 end;
+
+{ testSurface }
+
+function testSurface.diffuse(const pos: Vector): Color;
+begin
+  Result := ColoRred;
+end;
+
+function testSurface.reflect(const pos: Vector): Double;
+begin
+  Result := 0.0;
+end;
+
+function testSurface.roughness: Double;
+begin
+  Result := 3;
+end;
+
+function testSurface.specular(const pos: Vector): Color;
+begin
+  result := Colorwhite;
+end;
+
+
 
 { CheckerboardSurface }
 function CheckerboardSurface.diffuse(const pos: Vector): Color;
@@ -720,6 +755,7 @@ constructor Scene.Create(varPart : Double; const camDistance : double );
 begin
   shiny:=ShinySurface.Create;
   checkerboard:=CheckerboardSurface.Create;
+  test:=testSurface.Create;
 
   things := TObjectList<Thing>.Create();
   lights := TObjectList<Light>.Create();
@@ -727,7 +763,7 @@ begin
   things.Add( Plane.Create (Vector.Create(0.0, 1.0, 0.0), 0.0, checkerboard));
 //  things.Add( Sphere.Create(Vector.Create(0.0, 1.0, 0.5), 1.0, Shiny ));
   things.Add( Sphere.Create(Vector.Create(0.0, 1.0, VarPart), 1.0, Shiny ));
-  things.Add( Sphere.Create(Vector.Create(-1.0, 0.5, 1.5), 0.5, shiny));
+  things.Add( Sphere.Create(Vector.Create(-1.0, 0.5, 1.5), 0.5, test));
   things.Add( Sphere.Create(Vector.Create(-3.0, 8, -30), 16.2, shiny));
 
   lights.Add(Light.Create(Vector.Create(200, 10, 0.0), Color.Create(0.5, 0.5, 0.5)));
@@ -747,6 +783,7 @@ destructor Scene.Destroy;
   FreeAndNil(lights);
   FreeAndNil(xcamera);
   FreeAndNil(shiny);
+  FreeAndNil(test);
   FreeAndNil(checkerboard);
   inherited;
 end;
@@ -765,10 +802,12 @@ begin
   SetLength(Buffer,aWidth*aHeight*SizeOf(Int32));
 end;
 
-Initialization
+
+initialization
   Colorwhite := Color.Create(1,1,1);
   Colorgrey  := Color.Create(0.5,0.5,0.5);
   Colorblack := Color.Create(0,0,0);
+  ColorRed   := Color.Create(1,0,0);
 
   ColordefaultColor := Colorblack;
   Colorbackground   := Colorblack;
