@@ -2801,12 +2801,14 @@ function TBus.SendAndRecv( const client : TBusClientReader;
                         var aResponse : TBusEnvelop): UInt32;
 
 var ll : TList_PTBusEnvelop;
+    i,found : integer;
 begin
   Assert(Assigned(client));
   Assert(aMessage.TargetChannel<>'');
   result := 0;
 
   Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,client.ChannelListening);
+
   while not(Terminated) And not(TVisibilityThread(TBus.CurrentThread).Terminated) do
   begin
     //Do not use BusProcessMessages here : In certain condition, messages can
@@ -2815,20 +2817,31 @@ begin
     ll := client.ClientMessageStackLock;
     try
       result := ll.Count;
+      found := -1;
       if result >0 then
       begin
-        aResponse := ll[0]^; //Copy.
-        ll.Remove(0);
+        for i:= 0 to result-1 do
+        begin
+          if ll[i]^.TargetChannel = client.ChannelListening then //this is the one.
+          begin
+            aResponse := ll[i]^; //Copy.
+            dispose(ll[i]);
+            ll.Remove(i);
+            found := i;
+            break;
+          end;
+        end;
       end;
     finally
       client.ClientMessageStackUnLock;
     end;
 
-    if result>0 then
+    if found>-1 then
       break
     else
       sleep(CST_THREAD_COOLDOWN);
   end;
+
 end;
 
 function TBus.Subscribe(aChannelName: String;
