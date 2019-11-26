@@ -88,8 +88,6 @@ begin
   lbmp.Free;
 end;
 
-
-
 procedure TForm1.Button1Click(Sender: TObject);
 var
   sc  : Scene;
@@ -220,7 +218,8 @@ end;
 
 procedure TForm1.TrackBar1Change(Sender: TObject);
 begin
-  Button6Click(sender);
+  if Button6.enabled then
+    Button6Click(sender);
 end;
 
 { TRaytracerThread }
@@ -342,18 +341,19 @@ var ltak : Array of TRaytracerStackTask;
     i : integer;
     lv : Double;
 begin
+  if not button6.enabled then
+    exit;
+  Button6.Enabled := false;
+  memo1.Clear;
   if not Assigned(AthreadPool) then
   begin
     AThreadPool := TStackThreadPool.Create(GTHREADCOUNT);
-    AthreadPool.OnTaskFinished := OnTaskFinished;
+    AthreadPool.FreeTaskOnceProcessed := false;
   end;
-
-  Button6.Enabled := false;
-  memo1.Clear;
 
   lv := (Sin(Random(360)));
   SetLength(ltak,GTHREADCOUNT);
-  for I := 0 to GTHREADCOUNT-1 do
+  for i := 0 to GTHREADCOUNT-1 do
   begin
     ltak[i] := TRaytracerStackTask.Create(lv,TrackBar1.position);
     ltak[i].Id := i+1;
@@ -363,19 +363,24 @@ begin
     ltak[i].BmpSideSize := BMPSIZE;
   end;
 
-
   gsw.Reset;
   gsw.Start;
   for i := 0  to GTHREADCOUNT-1 do
   begin
     aThreadPool.Submit(ltak[i]); //Start immediatly, the stack is consumed by a pool of GTRHREADCOUNT threads.
   end;
+  while not(aThreadPool.idle) do;
 
-  while not(aThreadPool.Idle) do
-  begin
-    application.ProcessMessages; //By default, Threapool is configured as "synchrone". Wait sequence need the call of app.processmessages.
-  end;
   gsw.Stop;
+
+  //transfert result.
+  for i := 0  to GTHREADCOUNT-1 do
+  begin
+    ConvertRawToBitmapAndDrawIt(i+1,ltak[i].Bitmap);
+    ltak[i].free;
+    ltak[i] := nil;
+  end;
+
   Memo1.Lines.Add('[GS.Threads.Pool] Completed in: ' + IntToStr(gsw.ElapsedMilliseconds) + ' ms');
   Button6.Enabled := true;
 end;

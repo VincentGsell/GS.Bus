@@ -8,13 +8,11 @@ uses
   RayTraceThread.ClassicThread in '..\..\RayTraceThread.ClassicThread.pas',
   RayTraceThread.GSBusService in '..\..\RayTraceThread.GSBusService.pas',
   RayTraceThread.GSThreadsPool in '..\..\RayTraceThread.GSThreadsPool.pas',
-  GS.Bus.Services in '..\..\..\..\..\GS.Bus.Services.pas',
-  GS.Threads in '..\..\..\..\..\GS.Threads.pas',
   GS.Bus in '..\..\..\..\..\GS.Bus.pas',
-  GS.Threads.Pool in '..\..\..\..\..\GS.Threads.Pool.pas',
-  GS.Stream in '..\..\..\..\..\GS.Stream.pas',
-  GS.CPUUsage in '..\..\..\..\..\GS.CPUUsage.pas',
-  GS.Common in '..\..\..\..\..\GS.Common.pas';
+  GS.Bus.Services in '..\..\..\..\..\GS.Bus.Services.pas',
+  GS.Threads in '..\..\..\..\..\..\GS.Core\GS.Threads.pas',
+  GS.Threads.Pool in '..\..\..\..\..\..\GS.Core\GS.Threads.Pool.pas',
+  GS.Common in '..\..\..\..\..\..\GS.Core\GS.Common.pas';
 
 {$R *.res}
 
