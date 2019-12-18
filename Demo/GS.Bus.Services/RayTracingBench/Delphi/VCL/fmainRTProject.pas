@@ -369,7 +369,8 @@ begin
   begin
     aThreadPool.Submit(ltak[i]); //Start immediatly, the stack is consumed by a pool of GTRHREADCOUNT threads.
   end;
-  while not(aThreadPool.idle) do;
+
+  AThreadPool.await;
 
   gsw.Stop;
 

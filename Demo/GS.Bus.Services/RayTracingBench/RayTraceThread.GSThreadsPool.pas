@@ -27,7 +27,7 @@ Type
     FBMPSideSize: Integer;
 
   Public
-    Procedure Execute(Worker : TThread); Override;
+    Procedure Execute(Worker : TThreadTask); Override;
     Constructor Create(aVarValue : Double; const camDistance : Double = 5.0); Reintroduce;
     Destructor Destroy; Override;
 
@@ -65,7 +65,7 @@ begin
   inherited;
 end;
 
-procedure TRaytracerStackTask.Execute;
+procedure TRaytracerStackTask.Execute(Worker : TThreadTask);
 begin
   FRt.render(FModel,BmpSideSize,BmpSideSize,X1,X2,FBmp);
 end;

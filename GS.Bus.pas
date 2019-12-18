@@ -519,7 +519,7 @@ Public
 
   //Call this only if you have to pulse inner logic of Bus : in a timer, in OnIdle
   //(For those 2, modify CST_TIMER Value to a very low value), or in a thread Execute (And here CST_TIMER is ok).
-  //this will : consume awaiting message, dispatch messages folowing channel rules.
+  //this will : consume awaiting message, dispatch messages following channel rules.
   //You have than to call ProcessMessages to consume dispatched message.
   Procedure BusExecute; Virtual;
 
@@ -734,7 +734,7 @@ private
   fchan : TBusChannel;
 public
   constructor create(aChannel : TBusChannel); reintroduce;
-  procedure execute(Worker : TThread); Override;
+  procedure execute(Worker : TThreadTask); Override;
 End;
 
 
@@ -2809,7 +2809,7 @@ begin
 
   Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,client.ChannelListening);
 
-  while not(Terminated) And not(TVisibilityThread(TBus.CurrentThread).Terminated) do
+  while not(Terminated) do
   begin
     //Do not use BusProcessMessages here : In certain condition, messages can
     //be conssumed before Client Messagestack query.
@@ -3204,7 +3204,7 @@ begin
   fchan := aChannel;
 end;
 
-procedure TStackTaskChannel.execute(Worker : TThread);
+procedure TStackTaskChannel.execute(Worker : TThreadTask);
 begin
   fchan.DoProcessing;
 end;
