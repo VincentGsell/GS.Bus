@@ -1,4 +1,9 @@
 ![](https://tokei.rs/b1/github/VincentGsell/GS.Bus)
+![](https://tokei.rs/b1/github/VincentGsell/GS.Bus?category=code)](https://github.com//VincentGsell/GS.Bus)
+![](https://tokei.rs/b1/github/VincentGsell/GS.Bus?category=files)](https://github.com//VincentGsell/GS.Bus)
+![](https://tokei.rs/b1/github/VincentGsell/GS.Bus?category=lines)](https://github.com//VincentGsell/GS.Bus)
+![](https://tokei.rs/b1/github/VincentGsell/GS.Bus?category=blanks)](https://github.com//VincentGsell/GS.Bus)
+![](https://tokei.rs/b1/github/VincentGsell/GS.Bus?category=comments)](https://github.com//VincentGsell/GS.Bus)
 
 # GS.Bus : *InterThread* communication Application Bus for FPC/Delphi
   
