@@ -1,3 +1,5 @@
+![](https://tokei.rs/b1/github/VincentGsell/GS.Bus)
+
 # GS.Bus : *InterThread* communication Application Bus for FPC/Delphi
   
   the unit GS.Bus owned a complete and easy to use application bus system.
