@@ -1137,7 +1137,7 @@ begin
   ThreadID := ReadUInt64(aStream);
   PartialResult := ReadBoolean(aStream);
   ResultAsStream := TMemoryStream.Create;
-  ReadStream(aStream,ResultAsStream);
+  ReadStream(aStream,TStream(ResultAsStream));
 end;
 
 { TCustomServiceThread }
