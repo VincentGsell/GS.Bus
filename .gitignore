@@ -72,3 +72,6 @@ modules/
 *.pdn
 *.ppu
 *.bak
+
+Demo/GS.Bus.Services/RayTracingBench/Delphi/FMX/Android
+Demo/GS.Bus.Services/RayTracingBench/Delphi/FMX/Android64

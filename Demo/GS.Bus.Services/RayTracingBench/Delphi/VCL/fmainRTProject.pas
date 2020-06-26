@@ -4,13 +4,12 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
-  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls,Vcl.ComCtrls,
   System.Diagnostics,
   raytrace,
   System.Threading,
   GS.Bus.Services,
-  GS.Threads.Pool, Vcl.ComCtrls;
-
+  GS.Threads.Pool;
 
 
 Const
@@ -27,6 +26,13 @@ type
     Button5: TButton;
     Button6: TButton;
     TrackBar1: TTrackBar;
+    Button2: TButton;
+    Button7: TButton;
+    Button8: TButton;
+    Panel1: TPanel;
+    Panel2: TPanel;
+    Panel3: TPanel;
+    Panel4: TPanel;
     procedure FormCreate(Sender: TObject);
     procedure Button1Click(Sender: TObject);
     procedure Button3Click(Sender: TObject);
@@ -37,15 +43,21 @@ type
     procedure Image1MouseMove(Sender: TObject; Shift: TShiftState; X,
       Y: Integer);
     procedure TrackBar1Change(Sender: TObject);
+    procedure Button2Click(Sender: TObject);
+    procedure Button7Click(Sender: TObject);
+    procedure Button8Click(Sender: TObject);
   private
     { Private declarations }
   public
     gsw  : TStopwatch;
+    BenchLoop : Integer;
     { Public declarations }
     Procedure ConvertRawToBitmapAndDrawIt(Index : Integer; Raw : TRawBitmap);
 
     //GS.Threads.Pool event.
     Procedure OnTaskFinished(Const aThreadIndex : UInt32; aStackTask : TStackTask; TaskProcessTimeValue : UInt64);
+
+    procedure log(text : String);
   end;
 
 var
@@ -125,8 +137,81 @@ begin
   bmp.Free;
   RawBmp.Free;
 
-  Memo1.Lines.Add('[NO THREAD] Completed in: ' + IntToStr(gsw.ElapsedMilliseconds) + ' ms');
+  Log('[NO THREAD] Completed in: ' + IntToStr(gsw.ElapsedMilliseconds) + ' ms');
   Button1.Enabled := true;
+end;
+
+procedure TForm1.Button2Click(Sender: TObject);
+var l,ll : NativeInt;
+begin
+  l := GetTickCount;
+  try
+    For var i := 0 to (BenchLoop-1) do
+    begin
+      Button4Click(Sender);
+    end;
+    ll := GetTickCount;
+    Panel1.Caption := FloaTtoStr((ll-l)/1000)+' sec.';
+  except
+    On E : Exception do
+    begin
+      Panel1.Caption := 'Failed';
+      log(E.Message);
+    end;
+  end;
+  Application.ProcessMessages;
+
+  l := GetTickCount;
+  try
+    For var i := 0 to (BenchLoop-1) do
+    begin
+      Button3Click(Sender);
+    end;
+    ll := GetTickCount;
+    Panel2.Caption := FloaTtoStr((ll-l)/1000)+' sec.';
+  except
+    On E : Exception do
+    begin
+      Panel2.Caption := 'Failed';
+      log(E.Message);
+    end;
+  end;
+  Application.ProcessMessages;
+
+  l := GetTickCount;
+  try
+    For var i := 0 to (BenchLoop-1) do
+    begin
+      Button5Click(Sender);
+    end;
+    ll := GetTickCount;
+    Panel3.Caption := FloaTtoStr((ll-l)/1000)+' sec.';
+  except
+    On E : Exception do
+    begin
+      Panel3.Caption := 'Failed';
+      log(E.Message);
+    end;
+  end;
+  Application.ProcessMessages;
+
+  l := GetTickCount;
+  try
+    For var i := 0 to (BenchLoop-1) do
+    begin
+      Button6Click(Sender);
+    end;
+    ll := GetTickCount;
+    Panel4.Caption := FloaTtoStr((ll-l)/1000)+' sec.';
+  except
+    On E : Exception do
+    begin
+      Panel4.Caption := 'Failed';
+      log(E.Message);
+    end;
+  end;
+  Application.ProcessMessages;
+
 end;
 
 procedure TForm1.Button3Click(Sender: TObject);
@@ -187,6 +272,8 @@ end;
 procedure TForm1.FormCreate(Sender: TObject);
 begin
   gsw := TStopWatch.Create;
+  BenchLoop := 10;
+  Button2.Caption := Format('Bench (%d)',[BenchLoop]);
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
@@ -203,6 +290,11 @@ begin
   begin
 
   end;
+end;
+
+procedure TForm1.log(text: String);
+begin
+  Memo1.lines.add(text);
 end;
 
 procedure TForm1.OnTaskFinished(const aThreadIndex: UInt32;
@@ -253,18 +345,15 @@ begin
   gsw.Reset;
   gsw.Start;
   for i := 0 to GTHREADCOUNT-1 do
-  begin
     lt[i].Start;
-  end;
   for i := 0 to GTHREADCOUNT-1 do
-  begin
     lt[i].WaitFor;
-  end;
   gsw.Stop;
 
   for i := 0  to GTHREADCOUNT-1 do
   begin
     ConvertRawToBitmapAndDrawIt(lt[i].id,lt[i].Bitmap);
+    lt[i].WaitFor;
     lt[i].Bitmap.Free;
     lt[i].Model.Free;
     lt[i].Engine.Free;
@@ -369,9 +458,7 @@ begin
   begin
     aThreadPool.Submit(ltak[i]); //Start immediatly, the stack is consumed by a pool of GTRHREADCOUNT threads.
   end;
-
   AThreadPool.await;
-
   gsw.Stop;
 
   //transfert result.
@@ -384,6 +471,20 @@ begin
 
   Memo1.Lines.Add('[GS.Threads.Pool] Completed in: ' + IntToStr(gsw.ElapsedMilliseconds) + ' ms');
   Button6.Enabled := true;
+end;
+
+procedure TForm1.Button7Click(Sender: TObject);
+begin
+  Inc(BenchLoop);
+  Button2.Caption := Format('Bench (%d)',[BenchLoop]);
+end;
+
+procedure TForm1.Button8Click(Sender: TObject);
+begin
+  dec(BenchLoop);
+  if BenchLoop<5 then
+    BenchLoop := 5;
+  Button2.Caption := Format('Bench (%d)',[BenchLoop]);
 end;
 
 end.

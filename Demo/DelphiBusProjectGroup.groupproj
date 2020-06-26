@@ -9,6 +9,9 @@
         <Projects Include="GS.Bus.Services\RayTracingBench\Delphi\VCL\ProjectRayracerTest.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="GS.Bus.Services\RayTracingBench\Delphi\FMX\ProjectRaytracerTestFMX.dproj">
+            <Dependencies/>
+        </Projects>
         <Projects Include="GS.LocalMemCached\ProjectLocalMemCached.dproj">
             <Dependencies/>
         </Projects>
@@ -44,6 +47,15 @@
     <Target Name="ProjectRayracerTest:Make">
         <MSBuild Projects="GS.Bus.Services\RayTracingBench\Delphi\VCL\ProjectRayracerTest.dproj" Targets="Make"/>
     </Target>
+    <Target Name="ProjectRaytracerTestFMX">
+        <MSBuild Projects="GS.Bus.Services\RayTracingBench\Delphi\FMX\ProjectRaytracerTestFMX.dproj"/>
+    </Target>
+    <Target Name="ProjectRaytracerTestFMX:Clean">
+        <MSBuild Projects="GS.Bus.Services\RayTracingBench\Delphi\FMX\ProjectRaytracerTestFMX.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ProjectRaytracerTestFMX:Make">
+        <MSBuild Projects="GS.Bus.Services\RayTracingBench\Delphi\FMX\ProjectRaytracerTestFMX.dproj" Targets="Make"/>
+    </Target>
     <Target Name="ProjectLocalMemCached">
         <MSBuild Projects="GS.LocalMemCached\ProjectLocalMemCached.dproj"/>
     </Target>
@@ -72,13 +84,13 @@
         <MSBuild Projects="GS.Bus\MinimalBusUsage\Delphi\VCL\ProjectMinimalBus.dproj" Targets="Make"/>
     </Target>
     <Target Name="Build">
-        <CallTarget Targets="ProjectBus;ProjectRayracerTest;ProjectLocalMemCached;ProjectMVVM;ProjectMinimalBus"/>
+        <CallTarget Targets="ProjectBus;ProjectRayracerTest;ProjectRaytracerTestFMX;ProjectLocalMemCached;ProjectMVVM;ProjectMinimalBus"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="ProjectBus:Clean;ProjectRayracerTest:Clean;ProjectLocalMemCached:Clean;ProjectMVVM:Clean;ProjectMinimalBus:Clean"/>
+        <CallTarget Targets="ProjectBus:Clean;ProjectRayracerTest:Clean;ProjectRaytracerTestFMX:Clean;ProjectLocalMemCached:Clean;ProjectMVVM:Clean;ProjectMinimalBus:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="ProjectBus:Make;ProjectRayracerTest:Make;ProjectLocalMemCached:Make;ProjectMVVM:Make;ProjectMinimalBus:Make"/>
+        <CallTarget Targets="ProjectBus:Make;ProjectRayracerTest:Make;ProjectRaytracerTestFMX:Make;ProjectLocalMemCached:Make;ProjectMVVM:Make;ProjectMinimalBus:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

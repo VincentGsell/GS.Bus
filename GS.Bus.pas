@@ -747,6 +747,15 @@ Function AtomicIncrement64(var a : Int64) : Int64; Overload;
 Function AtomicIncrement64(var a : Int64; const Value : Int64) : Int64; Overload;
 Function AtomicDecrement64(var a : Int64) : Int64;
 
+///
+///
+///
+///
+///
+///
+///
+///
+///
 
   //Key methods : Call that in your coin of world (in another thread or not) to check your message box ;)
   //If aMailBox is present, message will not be summoning in a ClientReaders callbacks, but pass to the aMailBox (as a copy).
@@ -754,6 +763,15 @@ Function AtomicDecrement64(var a : Int64) : Int64;
   //OUT : It return the number of message processed.
   function BusProcessMessages( Const aClientReaders : Array of TBusClientReader;
                                       Const aMailBox : TBusEnvelopList = Nil) : UInt32;
+
+///
+///
+///
+///
+///
+///
+///
+///
 
 function StreamToStampedStringItems(aStream : TStream) : TBCDRStampedStringItems;
 function StampedStringItemsToString(const aStamptedString : TBCDRStampedStringItems; const WithStamp : Boolean = false) : String;

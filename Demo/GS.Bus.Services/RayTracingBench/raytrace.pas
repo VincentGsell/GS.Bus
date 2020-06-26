@@ -694,6 +694,7 @@ begin
       Image.Buffer[pos]   := c.b;
       Image.Buffer[pos+1] := c.g;
       Image.Buffer[pos+2] := c.r;
+      Image.Buffer[pos+3] := 255; //Alpha
     end;
   end;
 
@@ -756,7 +757,6 @@ begin
   shiny:=ShinySurface.Create;
   checkerboard:=CheckerboardSurface.Create;
   test:=testSurface.Create;
-
   things := TObjectList<Thing>.Create();
   lights := TObjectList<Light>.Create();
 
