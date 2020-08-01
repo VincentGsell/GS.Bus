@@ -38,7 +38,7 @@ Uses
   GS.Bus,
   GS.Threads,
   GS.Stream,
-  GS.CPUUsage;
+  GS.System.CPU;
 
 
 const
@@ -1164,7 +1164,7 @@ begin
 end;
 
 procedure TCustomServiceThread.Execute;
-var lt : UInt64;
+var lt : Int64;
 begin
   while not(terminated) do
   begin

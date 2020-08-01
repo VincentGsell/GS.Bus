@@ -70,7 +70,7 @@ Uses
 {$ENDIF}
   GS.Stream,
   GS.Common,
-  GS.CPUUsage,
+  GS.System.CPU,
   GS.Threads.Pool;
 
 Const
