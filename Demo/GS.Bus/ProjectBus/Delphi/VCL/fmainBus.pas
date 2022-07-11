@@ -171,6 +171,7 @@ procedure TForm2.btn2Click(Sender: TObject);
 var la : TBusClientReader;
 begin
   la := Bus.Subscribe(edt1.Text,OnReceived);   //La owned by your app : you have to manage it.
+  la.Event := Bus.GetNewEvent;
   lst2.AddItem('Reader on '+la.ChannelListening,la);
 
   bus.ChannelSet(edt1.Text,TBusChannelBehaviour.bcbTopic,false,cbEchoEnabled.Checked);

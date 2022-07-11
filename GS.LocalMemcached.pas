@@ -659,6 +659,7 @@ end;
 
 destructor TLocalMemcachedClient.Destroy;
 begin
+  FMaster.UnSubscribe(FClient);
   FreeAndNil(FResponseStringProtection);
   FreeAndNil(FResponseStream);
   FreeAndNil(FClient);

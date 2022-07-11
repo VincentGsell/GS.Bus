@@ -2,7 +2,7 @@ program ProjectBus;
 
 uses
   {$IFDEF DEBUG}
-  FastMM4,
+//  FastMM4,
   {$ELSE}
   ScaleMM2,
   {$ENDIF}

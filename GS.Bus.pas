@@ -43,6 +43,15 @@
 ///                  since it is delivered directly to relevant channel, there are no more  memory problem.
 /// 20190731 - VGS - Change Recv (refacto) : Recv([cl1,cl2],...) always exists and remain untouched, but second one
 ///                  Is removed : It was dedicated to SendAndReceive : Code has been move in it.
+/// 20200701 - VGS - Big refactoring, based upon TBusChannel : It become centric surround  this object.
+///                  Now TBusSystem use TBusChannel as central message districution - Thoritycaly, thread ready for subthreading.
+/// 20210320 - VGS - Fix tidious case on mainthread usage. TBusClientReader in now auto freed.
+/// 20210710 - VGS - TBusClientReader in no more auto freed :)
+/// 20220512 - VGS - Add interface and objet to easiest use.
+///                  Switched to generic pure. FPC will follow.
+///                  Remove strange "o" const test in additional object. (See Versionning)
+///
+
 
 ///-------------------------------------------------------------------------------
 unit GS.Bus;
@@ -55,29 +64,25 @@ Uses
 {$IFDEF FPC}
   Classes,
   SysUtils,
-  {$IFDEF USE_GENERIC}
   Generics.Collections, //Starting 3.1.1 only.
-  {$ENDIF}
   SyncObjs,
 {$ELSE}
   System.Classes,
   System.SysUtils,
-  {$IFDEF USE_GENERIC}
   System.Generics.Collections,
-  {$ENDIF}
   System.SyncObjs,
   System.Threading,
 {$ENDIF}
   GS.Stream,
   GS.Common,
-  GS.System.CPU,
-  GS.Threads.Pool;
+  GS.System.CPU;
 
 Const
   CST_BUSTIMER = 250; //MilliSec.
   CST_THREAD_COOLDOWN = 1;
   CST_ONE_SEC = 1000;
   CST_100_MSEC = 100;
+  CST_10_MSEC = 10;
 
   CST_DATAREPO_DELIMITER = ';';
 
@@ -106,6 +111,8 @@ TBusMessage = Packed Record
   function AsStream : TMemoryStream; //(!) Got new object.
   procedure FromByte(aByte : Byte);
   function AsByte : Byte;
+  procedure FromUInt32(aUInt32 : UInt32);
+  function AsUInt32 : UInt32;
   function Size : Uint64;
 End;
 pTBusMessage = ^TBusMessage;
@@ -155,6 +162,7 @@ Public
   procedure Add(aPTBusEnvelop : PTBusEnvelop);
   procedure Remove(Index : Uint32);
   procedure Clear;
+  procedure ClearAndDispose;
   property Items[Index : Uint32] : PTBusEnvelop read GetPTBusEnvelop Write SetPTBusEnvelop; default;
   property Count : Uint32 read GetPTBusEnvelopCount;
 end;
@@ -168,10 +176,10 @@ Public
   Constructor Create; Virtual;
   Destructor Destroy; Override;
 
-
   function Lock : TList_PTBusEnvelop;
   function TryLock(var aList : TList_PTBusEnvelop) : boolean;
   procedure Unlock;
+  procedure ClearAndDispose;
 
   Property Items : TList_PTBusEnvelop read FList; //Direct Access, beware (!).
 end;
@@ -183,15 +191,6 @@ Public
   Constructor Create(aMasterChannel : TBusChannel); reintroduce; Virtual;
   Property MasterChannel : TBusChannel read FMasterChannel;
 end;
-
-//Restricted : Manual mode. Only user having same keypass where user give what "session can read or write
-TBusChannelPrivacy = Class(TBusChannelAdditionalInformation)
-private
-  FKeyPass: String;
-Public
-  Constructor Create; reintroduce;
-  property KeyPass : String read FKeyPass Write FKeyPass;
-End;
 
 TBusChannelBehaviourTopic = Class(TBusChannelAdditionalInformation)
 Public
@@ -471,7 +470,6 @@ TBusSystem = Class
 Private
   FLockStat : TCriticalSection;
   FLockPropertyBasic : TCriticalSection;
-  FEventListProtect : TCriticalSection;
 
   FTotalMessageSend : Int64;
   FTotalMessagePending : Int64;
@@ -492,7 +490,6 @@ private
   FDoWork : TEvent;                                  //Event signaled when "Send" is called : It start message processing (Execute).
   FAllBusSubscribters : TBusClientReaderList;              //Raw Subscripter list. Reference. : WARNING : In channel object, there is shortcut to content object. Keep it synchro.
   FDataRepo : TObjectDictionary_StringStream;
-  FInternalEventList : TObjectList_TEvent;
 
   FIdle : Boolean;
 
@@ -562,7 +559,7 @@ Public
   Procedure GetChannelsConfigurationAsCSV(var aStr : TStringList);
   Procedure GetSubscribtersConfigurationAsCSV(var aStr : TStringList);
 
-  Function GetNewEvent : TEvent; //Managed (owned) by bus.
+  Function GetNewEvent : TEvent;
 
   procedure ChannelDelete(aChannelName : string);
   procedure ChannelSet( aChannelName : String;
@@ -635,12 +632,12 @@ Public
   // In : aClient : a TClientReader previously subscribted to a channel.
   // In : aTargetChannel : The channel where the message will be send.
   // In : aMessage : the message to send.
-  // Out : aResponse : The response message. If there are more than one message,
-  // first only will be presented.
+  // Out : aResponse : BusEnvelopList containing response. (usually 1, since at first message, sendAndrevc will return)
+  //    Note : aResponse will never be put to 0, so, you can use it in a loop, without clear)
   // Note : This method use above's Send and Recv (With WaitForMessage = true) methods.
   Function SendAndRecv( const client : TBusClientReader;
                         aMessage : TBusEnvelop;
-                        var aResponse : TBusEnvelop) : UInt32;
+                        var aResponse : TBusEnvelopList) : UInt32;
 
 
   Procedure GetChannelsConfigurationAsCSV(var aStr : TStringList);
@@ -648,7 +645,6 @@ Public
 
   procedure DeclareDataRepository(aRepoName : String);
   Function IsDataRepositoryExists(aRepoName : String) : Boolean;
-
 
   Function GetNewEvent : TEvent;
 
@@ -729,13 +725,83 @@ public
   Property RepositoryName : String read FRepo;
 End;
 
-TStackTaskChannel = Class(TStackTask)
-private
-  fchan : TBusChannel;
-public
-  constructor create(aChannel : TBusChannel); reintroduce;
-  procedure execute(Worker : TThreadTask); Override;
-End;
+
+///
+///
+///  New Interface-based and more frinedly use Bus subsystem.
+///
+///
+
+iBus = interface
+  function sub(_channelName : string) : uint32;
+  function unSub(_subId :uInt32) : uint32;
+  function getMessages(subId : uint32; var _messages : TArray<TBytes>) : uint32;
+  function sendMessage(_targetChannel : string; _messages : TArray<TBytes>) : uint32;
+end;
+
+iBusMessage = interface
+  function writeByte(_byte : Byte) : iBusMessage;
+  function writeString(_string : String) : iBusMessage;
+  function writeInt64(_int64 : Int64) : iBusMessage;
+
+  function readByte(var _byte : Byte) : iBusMessage;
+  function readString(var _string : String) : iBusMessage;
+  function readInt64(var _int64 : Int64) : iBusMessage;
+
+  function fromBuffer(_buffer : TBytes) : iBusMessage;
+  function buffer(var _buffer : TBytes) : iBusMessage;
+
+  function clear :iBusMessage;
+
+  //out
+  function ToBytes : TBytes;
+end;
+
+///
+///
+///   Implementation using TBus magic.
+
+  TGSBus = class(TInterfacedOBject, iBus)
+  private
+    FBus : TBus;
+    FClients : TObjectDictionary<uint32,TBusClientReader>;
+  public
+    Constructor Create; virtual;
+    Destructor Destroy; Override;
+
+    function sub(_channelName : string) : uint32;
+    function unSub(_subId :uInt32) : uint32;
+    function getMessages(subId : uint32; var _messages : TArray<TBytes>) : uint32;
+    function sendMessage(_targetChannel : string; _messages : TArray<TBytes>) : uint32;
+  end;
+
+  TGSBusMessage = Class(TInterfacedObject, iBusMessage)
+  private
+    FSTream : IGSStream;
+  public
+    Constructor Create; virtual;
+    function writeByte(_byte : Byte) : iBusMessage;
+    function writeString(_string : String) : iBusMessage;
+    function writeInt64(_int64 : Int64) : iBusMessage;
+
+    function readByte(var _byte : Byte) : iBusMessage;
+    function readString(var _string : String) : iBusMessage;
+    function readInt64(var _int64 : Int64) : iBusMessage;
+
+    function clear : iBusMessage;
+
+    function fromBuffer(_buffer : TBytes) : iBusMessage;
+    function buffer(var _buffer : TBytes) : iBusMessage;
+
+    function ToBytes : TBytes;
+  End;
+
+
+
+///
+///
+///
+///   Bus variable for single use.
 
 
 var Bus : TBus;
@@ -743,9 +809,23 @@ var Bus : TBus;
 Procedure StartStandartBus;
 Procedure ReleaseStandartBus;
 
+///
+///   iBus generator.
+
+function gsBusMessages : iBusMessage;
+function gsBus : iBus;
+
+
+//Some function (FPC) dedicated to bus.
 Function AtomicIncrement64(var a : Int64) : Int64; Overload;
 Function AtomicIncrement64(var a : Int64; const Value : Int64) : Int64; Overload;
 Function AtomicDecrement64(var a : Int64) : Int64;
+//Str op. for key/value.
+function StreamToStampedStringItems(aStream : TStream) : TBCDRStampedStringItems;
+function StampedStringItemsToString(const aStamptedString : TBCDRStampedStringItems; const WithStamp : Boolean = false) : String;
+//remove forbidden char
+function KeyStrNormalize(const aStrToProcess : String) : String;
+
 
 ///
 ///
@@ -773,15 +853,23 @@ Function AtomicDecrement64(var a : Int64) : Int64;
 ///
 ///
 
-function StreamToStampedStringItems(aStream : TStream) : TBCDRStampedStringItems;
-function StampedStringItemsToString(const aStamptedString : TBCDRStampedStringItems; const WithStamp : Boolean = false) : String;
-
-//remove forbidden char
-function KeyStrNormalize(const aStrToProcess : String) : String;
 
 implementation
 
+{$IFDEF FPC}
 var FBusGL : TCriticalSection;
+{$ENDIF}
+
+
+function gsBusMessages : iBusMessage;
+begin
+  result := TGSBusMessage.Create;
+end;
+
+function gsBus : iBus;
+begin
+  result := TGSBus.Create;
+end;
 
 function KeyStrNormalize(const aStrToProcess : String) : String;
 var i : integer;
@@ -829,7 +917,7 @@ begin
   {$ENDIF}
 end;
 
-Function AtomicDecrement64(var a : Int64) : Int64;
+Function AtomicDecrement64(var a : Int64) : Int64; Overload;
 begin
   {$IFDEF FPC}
   {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
@@ -839,6 +927,19 @@ begin
     {$ENDIF}
   {$ELSE}
   result := AtomicDecrement(a);
+  {$ENDIF}
+end;
+
+Function AtomicDecrement64(var a : Int64; const value : int64) : Int64; Overload;
+begin
+  {$IFDEF FPC}
+  {$IF DEFINED(CPUARM) OR DEFINED(CPU386)}
+  FBusGL.Acquire; try dec(a,value); result := a; finally FBusGL.Release; end; ///!!!
+    {$ELSE}
+  result := InterLockedExchangedDec64(a);
+    {$ENDIF}
+  {$ELSE}
+  result := AtomicDecrement(a,Value);
   {$ENDIF}
 end;
 
@@ -936,7 +1037,7 @@ begin
         aReader.ClientMessageStackUnlock;
       end;
 
-      result := mcl2.Count;
+      result := result + mcl2.Count;
 
       if mcl2.Count>0 then
       begin
@@ -962,7 +1063,6 @@ begin
               aReader.Bus.BusLog(t);
               if (aReader.Bus.CallBack_DisabledOnException) then
                 aReader.CallBack := Nil; //Avoid further Exception.
-
               if aReader.Bus.CallBack_ExceptionEnabled then
                 raise Exception.Create(t);
             end;
@@ -988,7 +1088,7 @@ begin
             mpPacketMailBox^.CreateTag := mcl2[i]^.CreateTag;
             //MailBox is local (parameter) no need to lock/unlock for access.
             aMailBox.Items.Add(mpPacketMailBox);
-
+            result := aMailBox.Items.Count;
             dispose(mcl2[i]);
           end;
         end;
@@ -1076,7 +1176,6 @@ begin
   Inherited Create;
   FLockStat := TCriticalSection.Create;
   FLockPropertyBasic := TCriticalSection.Create;
-  FEventListProtect := TCriticalSection.Create;
   FWaitMessageList := TBusEnvelopList.Create;
   FChannels := TBusChannelList.Create(self);
   FAllBusSubscribters := TBusClientReaderList.Create;
@@ -1087,7 +1186,6 @@ begin
   FTotalMessageProcessed := 0;
   FTotalMessagePersistent := 0;
   FDataRepo := TObjectDictionary_StringStream.Create;
-  FInternalEventList := TObjectList_TEvent.Create;
   FCallBack_DisabledOnException := true; //If exception in user's callback, the event attached to the ClientReader will be stopped.
   FCallBack_ExceptionEnabled := false;
   FLog_Enabled := False; //No log by default.
@@ -1144,8 +1242,6 @@ begin
     FDataRepo[i].Value.Free;
   FreeAndNil(FDataRepo);
   {$ENDIF}
-  FreeAndNil(FInternalEventList);
-  FreeAndNil(FEventListProtect);
   inherited;
 end;
 
@@ -1382,13 +1478,7 @@ end;
 
 function TBusSystem.GetNewEvent: TEvent;
 begin
-  FEventListProtect.Acquire;
-  try
-    Result := TEvent.Create(nil,False,False,EmptyStr);
-    FInternalEventList.add(Result);
-  finally
-    FEventListProtect.Release;
-  end;
+  Result := TEvent.Create(nil,False,False,EmptyStr);
 end;
 
 function TBusSystem.GetStats: String;
@@ -1772,8 +1862,8 @@ begin
           cl[i].Lock;
           cl[i].ProcessingMessageLock;
           cl.Remove(i); //Delete channel
+          FreeAndNil(lChannel);
         end;
-
         Break;
       end;
     end;
@@ -1786,6 +1876,17 @@ end;
 { TBusMessage }
 
 { TBusEnvelopList }
+
+procedure TBusEnvelopList.ClearAndDispose;
+var l : TList_PTBusEnvelop;
+begin
+  l := lock;
+  try
+    l.ClearAndDispose;
+  finally
+    Unlock;
+  end;
+end;
 
 constructor TBusEnvelopList.Create;
 begin
@@ -1802,7 +1903,7 @@ begin
     for I := 0 to FList.Count-1 do
     begin
       ap := FList[i];
-      Dispose(ap);
+      Dispose(pTBusEnvelop(ap));
     end;
   finally
     FLock.Release;
@@ -1912,8 +2013,6 @@ var packet : PTBusEnvelop;
               raise Exception.Create(t);
           end;
         end;
-
-        AtomicIncrement64(FMaster.FTotalMessageProcessed);
       end;
 
     end;
@@ -1936,6 +2035,7 @@ var packet : PTBusEnvelop;
           Duplicate;
           ll.Add(packet);
           IncDeliveredMessageCount;
+          AtomicIncrement64(FMaster.FTotalMessagePending);
 
           if assigned(lc.Event) then
             lc.Event.SetEvent; //If this reader is waiting somewhere in a thread, it will be trig.
@@ -1966,13 +2066,12 @@ var packet : PTBusEnvelop;
             Duplicate;
             ll.Add(packet);
             IncDeliveredMessageCount;
+            AtomicIncrement64(FMaster.FTotalMessagePending);
           end;
         end;
 
         if assigned(lc.Event) then
-        begin
           lc.Event.SetEvent; //If this reader is waiting somewhere in a thread, it will be trig.
-        end;
 
         //TODO : We can here evaluate if there are to many message in waiting for a client...
         // OR : Implement message time limitation existance within client message list. (Memory improvement)
@@ -2030,7 +2129,7 @@ var lbPersistantChannel : Boolean;
 begin
   lbPersistantChannel := MessageInThisChannelWillBeSetAsPersistent;
 
-  lcl := ChannelMessageCountLimitation; //Defalt value = -1
+  lcl := ChannelMessageCountLimitation; //Default value = -1
   if lcl=0 then //Note : ChannelMessageCountLimitation = 0 disable the channel. (feature.)
     Exit;
 
@@ -2084,9 +2183,13 @@ begin
               for j := idx to lmp.Count-1 do
                 lp.Add(lmp[j]);
               DeliverMessage(lp);
+              AtomicIncrement64(FMaster.FTotalMessageProcessed,lp.Count);
+              AtomicDecrement64(FMaster.FTotalMessagePending,lp.Count);
             end
             else
               DeliverMessage(lmp);
+              AtomicIncrement64(FMaster.FTotalMessageProcessed,lmp.Count);
+              AtomicDecrement64(FMaster.FTotalMessagePending,lmp.Count);
           end;
         end;
 
@@ -2104,9 +2207,12 @@ begin
                 for j := idx to lmp.Count-1 do
                   lp.Add(lmp[j]);
                 DeliverMessage(lp);
+                AtomicIncrement64(FMaster.FTotalMessageProcessed,lp.Count);
               end
               else
                 DeliverMessage(lmp);
+                AtomicIncrement64(FMaster.FTotalMessageProcessed,lmp.Count);
+                AtomicDecrement64(FMaster.FTotalMessagePending,lmp.Count);
             end;
             ///cbqQueueDistributed :
             ///   - Serve each client one after the other.
@@ -2118,6 +2224,8 @@ begin
                 lc := lclientList[lclientIndex];
                 DeliverSingleMessage(lmp[j]);
                 Inc(lclientIndex);
+                AtomicIncrement64(FMaster.FTotalMessageProcessed);
+                AtomicDecrement64(FMaster.FTotalMessagePending);
                 if lclientIndex > integer(lclientList.Count)-1 then
                   lclientIndex := 0;
               end;
@@ -2440,6 +2548,8 @@ end;
 destructor TBusClient.Destroy;
 begin
   FreeAndNil(FClientMessageStack);
+  if Assigned(Event) then
+    FreeAndNil(Event);
   inherited;
 end;
 
@@ -2573,23 +2683,31 @@ begin
   Buffer[0] := aByte;
 end;
 
+procedure TBusMessage.FromUInt32(aUInt32 : UInt32);
+begin
+  SetLength(Buffer,SizeOf(UInt32));
+  Move(aUInt32,Buffer[0],SizeOf(UInt32));
+end;
+
+function TBusMessage.AsUInt32 : UInt32;
+begin
+  result := 0;
+  if length(Buffer) = SizeOf(UInt32) then
+    Move(Buffer[0],Result,SizeOf(UInt32));
+end;
+
 
 function TBusMessage.AsDouble: Double;
 begin
   result := 0.0;
   if length(Buffer) = SizeOf(Double) then
-  begin
     Move(Buffer[0],Result,SizeOf(Double));
-  end;
 end;
 
 procedure TBusMessage.FromDouble(aD: Double);
-var t : Double;
 begin
   SetLength(Buffer,SizeOf(Double));
   Move(aD,Buffer[0],SizeOf(Double));
-  t := asDouble;
-  Assert(ad=t);
 end;
 
 procedure TBusMessage.FromStream(aStream: TStream);
@@ -2816,16 +2934,43 @@ end;
 
 function TBus.SendAndRecv( const client : TBusClientReader;
                         aMessage : TBusEnvelop;
-                        var aResponse : TBusEnvelop): UInt32;
+                        var aResponse : TBusEnvelopList): UInt32;
 
 var ll : TList_PTBusEnvelop;
     i,found : integer;
+    ff : boolean;
 begin
   Assert(Assigned(client));
+  Assert(Assigned(aResponse));
   Assert(aMessage.TargetChannel<>'');
+  Assert(client.ChannelListening = aMessage.ResponseChannel,'Client must be already subscribted to the response channel');
   result := 0;
+  ff := false;
+  try
+    if not Assigned(client.Event) then begin
+      ff := true;
+      client.Event := TEvent.Create;
+    end;
 
-  Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,client.ChannelListening);
+    Send(aMessage.ContentMessage,aMessage.TargetChannel,aMessage.AdditionalData,client.ChannelListening);
+    while true do begin
+      case client.Event.WaitFor(CST_BUSTIMER) of
+        wrSignaled : result := BusProcessMessages([Client],aResponse);
+        wrAbandoned,wrError : Break;
+      end;
+      if result>0 then
+        break
+    end;
+
+  finally
+    if ff then
+      client.Event.Free;
+      client.Event := nil;
+  end;
+
+
+
+{
 
   while not(Terminated) do
   begin
@@ -2859,7 +3004,7 @@ begin
     else
       sleep(CST_THREAD_COOLDOWN);
   end;
-
+}
 end;
 
 function TBus.Subscribe(aChannelName: String;
@@ -2931,17 +3076,26 @@ end;
 
 function TBusClientDataRepo.GetValue(const aKey: String;
   var aValue: Double): Boolean;
-var m1,m2 : TBusEnvelop;
+var m1 : TBusEnvelop;
+    m2 : TBusEnvelopList;
+    mb : PTBusEnvelop;
 begin
   result := false;
   aValue := 0.0;
 
   m1.TargetChannel := FInternalChannelToDataRepo;
   m1.AdditionalData := 'GET;'+aKey+GetRepoStr;
-  result := FBus.SendAndRecv(FClient,m1,m2)>0;
-  if result then
-  begin
-    aValue := m2.ContentMessage.AsDouble;
+  m2 := TBusEnvelopList.Create;
+  try
+    result := FBus.SendAndRecv(FClient,m1,m2)>0;
+    if result then
+    begin
+      mb := m2.Items[0];
+      aValue := mb.ContentMessage.AsDouble;
+      m2.ClearAndDispose;
+    end;
+  finally
+    FreeAndNil(m2);
   end;
 end;
 
@@ -2958,13 +3112,25 @@ begin
 end;
 
 function TBusClientDataRepo.isKeyEntryExits(aKey: String): boolean;
-var m1,m2 : TBusEnvelop;
+var m1 : TBusEnvelop;
+    m2 : TBusEnvelopList;
+    mb : PTBusEnvelop;
 begin
   result := false;
   m1.TargetChannel := FInternalChannelToDataRepo;
   m1.AdditionalData := 'EXISTS;'+KeyStrNormalize(aKey)+GetRepoStr;
-  if FBus.SendAndRecv(FClient,m1,m2)>0 then
-    result := m2.ContentMessage.AsString = 'Y';
+  m2 := TBusEnvelopList.Create;
+  try
+    result := FBus.SendAndRecv(FClient,m1,m2)>0;
+    if result then
+    begin
+      mb := m2.Items[0];
+      result := mb.ContentMessage.AsString = 'Y';
+      m2.ClearAndDispose;
+    end;
+  finally
+    FreeAndNil(m2);
+  end;
 end;
 
 procedure TBusClientDataRepo.InternalSetValue(const aKey, aValue,
@@ -2978,7 +3144,9 @@ begin
 end;
 
 function TBusClientDataRepo.GetValue(const aKey : String; var aValue : String): Boolean;
-var m1,m2 : TBusEnvelop;
+var m1 : TBusEnvelop;
+    m2 : TBusEnvelopList;
+    mb : PTBusEnvelop;
 begin
   result := false;
   aValue := '';
@@ -2986,16 +3154,25 @@ begin
   m1.TargetChannel := FInternalChannelToDataRepo;
   m1.AdditionalData := 'GET;'+KeyStrNormalize(aKey)+GetRepoStr;
 
-  result := FBus.SendAndRecv(FClient,m1,m2)>0;
-  if result then
-  begin
-    aValue := m2.ContentMessage.AsString;
+  m2 := TBusEnvelopList.Create;
+  try
+    result := FBus.SendAndRecv(FClient,m1,m2)>0;
+    if result then
+    begin
+      mb := m2.Items[0];
+      aValue := mb.ContentMessage.AsString;
+      m2.ClearAndDispose;
+    end;
+  finally
+    FreeAndNil(m2);
   end;
 end;
 
 function TBusClientDataRepo.GetValue(const aKey: String;
   aValue: TStream): Boolean;
-var m1,m2 : TBusEnvelop;
+var m1 : TBusEnvelop;
+    m2 : TBusEnvelopList;
+    mb : PTBusEnvelop;
 begin
   result := false;
   Assert(Assigned(aValue));
@@ -3003,12 +3180,20 @@ begin
 
   m1.TargetChannel := FInternalChannelToDataRepo;
   m1.AdditionalData := 'GET;'+KeyStrNormalize(aKey)+GetRepoStr;
-  result := FBus.SendAndRecv(FClient,m1,m2)>0;
-  if result then //we got a message.
-  begin
-    result := Length(m2.ContentMessage.Buffer)>0;
+
+  m2 := TBusEnvelopList.Create;
+  try
+    result := FBus.SendAndRecv(FClient,m1,m2)>0;
     if result then
-      m2.ContentMessage.ToStream(aValue);
+    begin
+      mb := m2.Items[0];
+      result := Length(mb.ContentMessage.Buffer)>0;
+      if result then
+        mb.ContentMessage.ToStream(aValue);
+      m2.ClearAndDispose;
+    end;
+  finally
+    FreeAndNil(m2);
   end;
 end;
 
@@ -3103,6 +3288,17 @@ begin
   SetLength(Farray,CST_ARRAY_INIT_QTE);
   FIndex := 0;
   FInitialized := False;
+end;
+
+procedure TList_PTBusEnvelop.ClearAndDispose;
+var i : integer;
+    l : PTBusEnvelop;
+begin
+  for i := 0 to Findex-1 do begin
+    l := FArray[i];
+    Dispose(l);
+  end;
+  Clear;
 end;
 
 constructor TList_PTBusEnvelop.Create;
@@ -3216,6 +3412,7 @@ end;
 
 { TStackTaskChannel }
 
+{
 constructor TStackTaskChannel.create(aChannel: TBusChannel);
 begin
   assert(Assigned(aChannel));
@@ -3226,6 +3423,8 @@ procedure TStackTaskChannel.execute(Worker : TThreadTask);
 begin
   fchan.DoProcessing;
 end;
+}
+
 
 { TBCDRStampedStringItem }
 
@@ -3241,20 +3440,166 @@ begin
   WriteString(aStream,Data);
 end;
 
-{ TBusChannelPrivacy }
+///
+///
+///
+///
+///
 
-constructor TBusChannelPrivacy.Create;
+{ TGSBus }
+
+constructor TGSBus.Create;
 begin
-  FKeyPass := '{7FDB0206-5775-492C-B8EF-5D8642C02BF6}'; //Or put whatever you want.
+  inherited;
+  FClients :=  TObjectDictionary<uint32,TBusClientReader>.Create([doOwnsValues]);
+  FBus := TBus.Create;
+  FBus.Start;
+end;
+
+destructor TGSBus.Destroy;
+begin
+  FBus.BusShutDown;
+  FreeAndNil(FBus);
+  FreeAndNil(FClients);
+  inherited;
+end;
+
+function TGSBus.getMessages(subId: uint32;
+  var _messages: TArray<TBytes>): uint32;
+var lclient : TBusClientReader;
+    lml : TBusEnvelopList;
+    lmlp : TList_PTBusEnvelop;
+begin
+  result := 0;
+  if FClients.TryGetValue(subId,lClient) then begin
+    lml := TBusEnvelopList.Create;
+    try
+      if BusProcessMessages([lclient],lml)>0 then begin
+        lmlp := lml.Lock;
+        try
+          SetLength(_messages,lmlp.Count);
+          for var i := 0 to lmlp.Count-1 do
+            _messages[i] := lmlp[i].ContentMessage.Buffer;
+        finally
+          result := lmlp.Count;
+          lml.Unlock;
+        end;
+      end;
+    finally
+      FreeAndNil(lml);
+    end;
+  end;
+end;
+
+function TGSBus.sendMessage(_targetChannel: string;
+  _messages: TArray<TBytes>): uint32;
+var l : TBusMessage;
+    i : integer;
+begin
+  for i := 0 to Length(_messages)-1 do begin
+    l.Buffer := _messages[i];
+    FBus.Send(l,_targetChannel);
+  end;
+end;
+
+function TGSBus.sub(_channelName: string): uint32;
+var l : TBusClientReader;
+begin
+  l := FBus.Subscribe(_channelName,nil);
+  result := FClients.Count+100;
+  FClients.Add(result,l);
+end;
+
+function TGSBus.unSub(_subId: uInt32): uint32;
+var lc : TBusClientReader;
+begin
+  result := 0;
+  if FClients.TryGetValue(_subId,lc) then
+    FBus.UnSubscribe(lc);
+end;
+
+{ TGSBusMessage }
+
+function TGSBusMessage.buffer(var _buffer: TBytes): iBusMessage;
+begin
+  _buffer := FSTream.AsBytes;
+  result := self;
+end;
+
+function TGSBusMessage.clear: iBusMessage;
+begin
+  FSTream.clear;
+end;
+
+constructor TGSBusMessage.Create;
+begin
+  inherited;
+  FSTream := TGSStreamImpl.Create;
+end;
+
+function TGSBusMessage.fromBuffer(_buffer : TBytes) : iBusMessage;
+begin
+  FSTream.loadFromBytes(_buffer);
+  result := self;
+end;
+
+function TGSBusMessage.readByte(var _byte: Byte): iBusMessage;
+begin
+//  FSTream.read
+  result := self;
+end;
+
+function TGSBusMessage.readInt64(var _int64: Int64): iBusMessage;
+begin
+  _int64 := FSTream.int64Read;
+  result := self;
+end;
+
+function TGSBusMessage.readString(var _string: String): iBusMessage;
+begin
+  _string := FSTream.stringRead;
+  result := self;
+end;
+
+function TGSBusMessage.ToBytes: TBytes;
+begin
+  buffer(result);
+end;
+
+function TGSBusMessage.writeByte(_byte: Byte): iBusMessage;
+begin
+  result := self;
 end;
 
 
+function TGSBusMessage.writeInt64(_int64: Int64): iBusMessage;
+begin
+  FSTream.int64write(_int64);
+  result := self;
+end;
+
+function TGSBusMessage.writeString(_string: String): iBusMessage;
+begin
+  FSTream.stringWrite(_string);
+  result := self;
+end;
+
+
+
+
+
+
 Initialization
+
+{$IFDEF FPC}
 FBusGL := TCriticalSection.Create;
+{$ENDIF}
 Bus := Nil;
 
 Finalization
 
+{$IFDEF FPC}
 FreeAndNil(FBusGL);
+{$ENDIF}
 
 end.

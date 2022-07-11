@@ -10,14 +10,12 @@ object Form2: TForm2
   Font.Height = -11
   Font.Name = 'Tahoma'
   Font.Style = []
-  OldCreateOrder = False
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   OnDestroy = FormDestroy
   DesignSize = (
     1095
     725)
-  PixelsPerInch = 96
   TextHeight = 13
   object Label6: TLabel
     Left = 536
@@ -378,10 +376,6 @@ object Form2: TForm2
     object tsDataRepo: TTabSheet
       Caption = 'In Memory DataRepo'
       ImageIndex = 1
-      ExplicitLeft = 0
-      ExplicitTop = 0
-      ExplicitWidth = 0
-      ExplicitHeight = 0
       DesignSize = (
         1071
         639)

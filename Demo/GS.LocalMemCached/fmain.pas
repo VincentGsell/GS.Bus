@@ -169,8 +169,9 @@ end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
-  FreeAndNil(MemCached);
+  MemCached.BusShutDown;
   FreeAndNil(clientMemCached);
+  FreeAndNil(MemCached);
 end;
 
 procedure TForm1.OnMemCachedReady(Sender: TObject);
